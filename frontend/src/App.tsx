@@ -7,11 +7,12 @@ function App() {
   const callApi = async () => {
 
     try {
+      const apiBaseUrl =
+            import.meta.env.VITE_API_BASE_URL
 
       const response = await fetch(
-          '/api/hello'
+            `${apiBaseUrl}/api/hello`
       )
-
       const data = await response.json()
 
       setMessage(data.message)

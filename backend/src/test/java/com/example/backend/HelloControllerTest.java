@@ -25,7 +25,7 @@ class BackendApplicationTests {
 
 	@Test
 	void helloReturnsJson() throws Exception {
-		mockMvc.perform(get("/hello"))
+		mockMvc.perform(get("/api/hello"))
 				.andExpect(status().isOk())
 				.andExpect(content().contentType(MediaType.APPLICATION_JSON))
 				.andExpect(jsonPath("$.message").value("hello"));
