@@ -6,19 +6,18 @@ $acrLoginServer = "$acrName.azurecr.io"
 $resourceGroup = "spring-azure-serverless-demo-rg"
 $containerApp = "spring-azure-serverless-dev-ca"
 
-$tag = (git rev-parse --short HEAD).Trim()
+$dirty = git status --porcelain
+
+if ($dirty) {
+    $tag = "$(git rev-parse --short HEAD)-dirty"
+}
+else {
+    $tag = git rev-parse --short HEAD
+}
 
 $image = "$acrLoginServer/backend:$tag"
 
-Write-Host "Image Tag : $tag"
-Write-Host "Image     : $image"
-
-Push-Location backend
-
-mvn spring-boot:build-image `
-  "-Dspring-boot.build-image.imageName=$image"
-
-Pop-Location
+Write-Host "Deploying image: $image"
 
 az acr login `
   --name $acrName
@@ -29,6 +28,12 @@ az containerapp update `
   --name $containerApp `
   --resource-group $resourceGroup `
   --image $image
+
+az containerapp show `
+  --name $containerApp `
+  --resource-group $resourceGroup `
+  --query properties.template.containers[0].image `
+  -o tsv
 
 Write-Host ""
 Write-Host "Deployment completed."
