@@ -9,9 +9,12 @@ public class CorsConfig implements WebMvcConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
+        // Azure Static Web Apps とローカル開発環境からの
+        // Spring Boot API 呼び出しを許可する
         registry.addMapping("/api/**")
                 .allowedOriginPatterns(
-                        "https://*.azurestaticapps.net"
+                        "https://*.azurestaticapps.net",
+                        "http://localhost:5173"
                 )
                 .allowedMethods("*")
                 .allowedHeaders("*");
