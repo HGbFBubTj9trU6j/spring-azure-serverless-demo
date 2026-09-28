@@ -2,6 +2,8 @@ Push-Location frontend
 
 swa deploy `
   ./dist `
-  --deployment-token $env:SWA_DEPLOYMENT_TOKEN
+  --env production `
+  --deployment-token $env:SWA_DEPLOYMENT_TOKEN `
+  --verbose
 
 Pop-Location
