@@ -21,6 +21,12 @@ param containerAppName string
 @description('Container image')
 param containerImage string
 
+@description('Static Web App name')
+param staticWebAppName string
+
+@description('Static Web App region')
+param staticWebAppLocation string
+
 resource rg 'Microsoft.Resources/resourceGroups@2025-04-01' = {
   name: resourceGroupName
   location: location
@@ -67,6 +73,15 @@ module containerApp 'modules/container-app.bicep' = {
     containerRegistryLoginServer: containerRegistry.outputs.loginServer
     containerImage: containerImage
     identityId: containerAppIdentity.outputs.identityId
+  }
+}
+
+module staticWebApp 'modules/static-web-app.bicep' = {
+  name: 'static-web-app'
+  scope: rg
+  params: {
+    location: staticWebAppLocation
+    staticWebAppName: staticWebAppName
   }
 }
 
