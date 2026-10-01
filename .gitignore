@@ -25,3 +25,4 @@ replay_pid*
 /infra/main.json
 
 .env
+frontend/public/staticwebapp.config.json

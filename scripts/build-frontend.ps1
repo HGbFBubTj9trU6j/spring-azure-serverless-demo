@@ -1,5 +1,22 @@
 # build-frontend.ps1
 
+if (-not $env:ENTRA_TENANT_ID) {
+    throw "ENTRA_TENANT_ID environment variable is not set."
+}
+
+$template = Get-Content `
+  "scripts/staticwebapp.config.template.json" `
+  -Raw
+
+$config = $template.Replace(
+  "__OPENID_ISSUER__",
+  "https://login.microsoftonline.com/$($env:ENTRA_TENANT_ID)/v2.0"
+)
+
+Set-Content `
+  "frontend/public/staticwebapp.config.json" `
+  $config
+
 $resourceGroup = "spring-azure-serverless-demo-rg"
 $containerApp = "spring-azure-serverless-dev-ca"
 
