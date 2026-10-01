@@ -17,3 +17,5 @@ param containerImage = 'backend:0.0.1-SNAPSHOT'
 param staticWebAppName = 'spring-azure-serverless-demo-dev-swa'
 
 param staticWebAppLocation = 'eastasia'
+
+param staticWebAppSku = 'Standard'

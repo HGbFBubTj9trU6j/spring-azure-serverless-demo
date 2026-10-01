@@ -4,13 +4,21 @@ param location string
 @description('Static Web App name')
 param staticWebAppName string
 
+@allowed([
+  'Free'
+  'Standard'
+])
+param staticWebAppSku string = 'Free'
+
 resource staticWebApp 'Microsoft.Web/staticSites@2023-12-01' = {
   name: staticWebAppName
   location: location
+
   sku: {
-    name: 'Free'
-    tier: 'Free'
+    name: staticWebAppSku
+    tier: staticWebAppSku
   }
+
   properties: {}
 }
 

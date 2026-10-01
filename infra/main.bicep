@@ -27,6 +27,12 @@ param staticWebAppName string
 @description('Static Web App region')
 param staticWebAppLocation string
 
+@allowed([
+  'Free'
+  'Standard'
+])
+param staticWebAppSku string = 'Free'
+
 resource rg 'Microsoft.Resources/resourceGroups@2025-04-01' = {
   name: resourceGroupName
   location: location
@@ -76,12 +82,14 @@ module containerApp 'modules/container-app.bicep' = {
   }
 }
 
-module staticWebApp 'modules/static-web-app.bicep' = {
-  name: 'static-web-app'
-  scope: rg
+module staticWebApp './modules/static-web-app.bicep' = {
+  name: 'staticWebApp'
+  scope: resourceGroup(resourceGroupName)
+
   params: {
     location: staticWebAppLocation
     staticWebAppName: staticWebAppName
+    staticWebAppSku: staticWebAppSku
   }
 }
 
