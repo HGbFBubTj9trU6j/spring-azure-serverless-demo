@@ -81,6 +81,8 @@ For additional architectural details and design decisions, see docs/architecture
 spring-azure-serverless-demo/
 ├── backend/
 ├── frontend/
+├── config/
+│   └── dev.psd1
 ├── infra/
 │   ├── main.bicep
 │   ├── dev.bicepparam
@@ -91,6 +93,8 @@ spring-azure-serverless-demo/
 │       ├── container-app.bicep
 │       └── static-web-app.bicep
 ├── scripts/
+│   ├── whatif-infra.ps1
+│   ├── deploy-infra.ps1
 │   ├── build-backend.ps1
 │   ├── deploy-backend.ps1
 │   ├── build-frontend.ps1
@@ -99,10 +103,17 @@ spring-azure-serverless-demo/
 ├── docs/
 │   ├── architecture.md
 │   ├── authentication.md
+│   ├── authentication-setup.md
 │   ├── deployment.md
 │   └── troubleshooting.md
 └── swa-cli.config.json
 ```
+
+Environment-specific settings used by the application build and deployment scripts are stored under config.
+
+The default development environment uses:
+
+config/dev.psd1
 
 ---
 
@@ -119,9 +130,10 @@ Resource Group
 │   └── AcrPull role assignment
 ├── Azure Static Web Apps
 └── Azure Container Apps Environment
-    └── Azure Container App
-        └── External HTTPS ingress
 ```
+The Azure Container App is deployed separately after the backend OCI image has been built and pushed to Azure Container Registry.
+
+Its configuration remains managed with Bicep through infra/modules/container-app.bicep.
 
 Azure Static Web Apps is deployed to East Asia because the service is not available in Japan East for the subscription and resource type used by this project.
 
@@ -171,13 +183,13 @@ docker info
 The deployment sequence is:
 
 ```text
-Provision infrastructure
+Provision shared Azure infrastructure
         │
         ▼
-Build backend image
+Build backend OCI image
         │
         ▼
-Deploy backend
+Push image and deploy Container App
         │
         ▼
 Build frontend
@@ -225,22 +237,34 @@ Sign in to the Azure subscription tenant and deploy the infrastructure.
 
 This creates:
 
-- Azure Static Web Apps
-- Azure Container Apps Environment
-- Azure Container App
+- Resource Group
 - Azure Container Registry
+- Azure Container Apps Environment
 - User Assigned Managed Identity
+- AcrPull role assignment
+- Azure Static Web Apps
+
+The Azure Container App is intentionally not created during infrastructure provisioning. It is deployed after the backend image has been built and pushed to Azure Container Registry.
 
 ### Step 2: Deploy the Application
 
-Build and deploy the backend.
+#### Build and deploy the backend.
 
 ```powershell
 .\scripts\build-backend.ps1
 .\scripts\deploy-backend.ps1
 ```
 
-Build and deploy the frontend.
+By default, the backend scripts use the dev environment configuration from config/dev.psd1.
+
+To use another environment configuration, specify the environment name:
+
+```powershell
+.\scripts\build-backend.ps1 -Environment prod
+.\scripts\deploy-backend.ps1 -Environment prod
+```
+
+#### Build and deploy the frontend.
 
 ```powershell
 .\scripts\build-frontend.ps1
@@ -377,18 +401,11 @@ The following diagnostic may appear:
 ```text
 NestedDeploymentShortCircuited
 ```
+The infrastructure What-If operation covers the resources managed by infra/main.bicep.
 
-The Container App module receives outputs from other modules, including:
+The Azure Container App is deployed separately by deploy-backend.ps1 and is therefore outside the infrastructure What-If scope.
 
-- Container Apps Environment ID
-- Azure Container Registry login server
-- Managed Identity ID
-
-These values may require ARM `reference()` evaluation and might not be fully resolvable during a What-If operation.
-
-The diagnostic does not by itself indicate that deployment will fail.
-
-Azure may also add service-managed properties to deployed resources. These properties can appear as modifications in later What-If results even when the Bicep-managed configuration has not changed.
+Azure may add service-managed properties to deployed resources. These properties can appear as modifications in later What-If results even when the Bicep-managed configuration has not changed.
 
 ---
 
@@ -397,13 +414,14 @@ Azure may also add service-managed properties to deployed resources. These prope
 Run:
 
 ```powershell
-az deployment sub create `
-  --name spring-azure-serverless-demo `
-  --location japaneast `
-  --parameters .\infra\dev.bicepparam
+.\scripts\deploy-infra.ps1
 ```
 
-The deployment is subscription-scoped because `main.bicep` creates the Resource Group.
+The script performs a subscription-scoped Bicep deployment because infra/main.bicep creates the Resource Group.
+
+This deployment creates the shared Azure infrastructure required before application deployment.
+
+The Azure Container App itself is deployed separately by deploy-backend.ps1.
 
 ---
 
@@ -494,37 +512,60 @@ The backend image is built with Spring Boot Buildpacks through the Maven Wrapper
 .\scripts\build-backend.ps1
 ```
 
+By default, the script loads environment-specific settings from `config/dev.psd1`.
+
+A different environment can be selected with:
+
+```powershell
+.\scripts\build-backend.ps1 -Environment prod
+```
+
 The build script:
 
-1. Gets the current Git commit hash.
-2. Detects whether the working tree contains uncommitted changes.
-3. Generates an image tag.
-4. Runs a clean Spring Boot Buildpacks build.
-5. Creates an OCI image in the local container runtime.
+1. Loads the selected environment configuration.
+2. Gets the current Git commit hash.
+3. Detects whether the working tree contains uncommitted changes.
+4. Generates an image tag.
+5. Runs a clean Spring Boot Buildpacks build.
+6. Creates an OCI image in the local container runtime.
 
 Example image tags:
 
 ```text
-backend:abc1234
-backend:abc1234-dirty
+<registry>.azurecr.io/backend:abc1234
+<registry>.azurecr.io/backend:abc1234-dirty
 ```
 
 The `-dirty` suffix indicates that the image was built from a working tree containing uncommitted changes.
 
 ---
 
+Deploy the Backend
 ## Deploy the Backend
 
 ```powershell
 .\scripts\deploy-backend.ps1
 ```
 
+By default, the script loads environment-specific settings from `config/dev.psd1`.
+
+A different environment can be selected with:
+
+```powershell
+.\scripts\deploy-backend.ps1 -Environment prod
+```
+
 The deployment script:
 
-1. Signs in to Azure Container Registry.
-2. Pushes the previously built OCI image.
-3. Updates the Azure Container App to use the image.
-4. Creates a new Container App revision when the image reference changes.
+1. Loads the selected environment configuration.
+2. Determines the image tag from the current Git state.
+3. Signs in to Azure Container Registry.
+4. Pushes the previously built OCI image.
+5. Resolves the Container Apps Environment and Managed Identity resource IDs.
+6. Deploys the Azure Container App using `infra/modules/container-app.bicep`.
+7. Displays the deployed Container App FQDN and image.
+
+The same Bicep deployment path is used for both the initial Container App creation and subsequent updates.
 
 Verify the deployed image:
 

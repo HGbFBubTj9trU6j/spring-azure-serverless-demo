@@ -15,7 +15,6 @@ resource environment 'Microsoft.App/managedEnvironments@2026-07-01' = {
       {
         name: 'Consumption'
         workloadProfileType: 'Consumption'
-        enableFips: false
       }
     ]
 

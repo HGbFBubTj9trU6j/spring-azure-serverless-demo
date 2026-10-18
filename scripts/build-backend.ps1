@@ -1,6 +1,12 @@
+param(
+    [string]$Environment = "dev"
+)
+
 $ErrorActionPreference = "Stop"
 
-$acrName = "springazureserverlessdemoacr"
+$config = Import-PowerShellDataFile ".\config\$Environment.psd1"
+
+$acrName = $config.AcrName
 $acrLoginServer = "$acrName.azurecr.io"
 
 $dirty = git status --porcelain
@@ -18,8 +24,19 @@ Write-Host "Building image: $image"
 
 Push-Location backend
 
-& .\mvnw.cmd clean spring-boot:build-image `
-  "-Dspring-boot.build-image.imageName=$image" `
-  "-Dbuild.version=$tag"
+try {
+    & .\mvnw.cmd clean spring-boot:build-image `
+        "-Dspring-boot.build-image.imageName=$image" `
+        "-Dbuild.version=$tag"
 
-Pop-Location
+    if ($LASTEXITCODE -ne 0) {
+        throw "Backend image build failed."
+    }
+}
+finally {
+    Pop-Location
+}
+
+Write-Host ""
+Write-Host "Build completed."
+Write-Host "Image: $image"

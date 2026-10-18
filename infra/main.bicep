@@ -15,12 +15,6 @@ param containerAppsEnvironmentName string
 @description('Managed Identity name')
 param identityName string
 
-@description('Container App name')
-param containerAppName string
-
-@description('Container image')
-param containerImage string
-
 @description('Static Web App name')
 param staticWebAppName string
 
@@ -69,19 +63,6 @@ module containerAppIdentity 'modules/container-app-identity.bicep' = {
   ]
 }
 
-module containerApp 'modules/container-app.bicep' = {
-  name: 'container-app'
-  scope: rg
-  params: {
-    location: location
-    containerAppName: containerAppName
-    containerAppsEnvironmentId: containerAppsEnvironment.outputs.environmentId
-    containerRegistryLoginServer: containerRegistry.outputs.loginServer
-    containerImage: containerImage
-    identityId: containerAppIdentity.outputs.identityId
-  }
-}
-
 module staticWebApp './modules/static-web-app.bicep' = {
   name: 'staticWebApp'
   scope: resourceGroup(resourceGroupName)
@@ -105,5 +86,3 @@ output environmentMode string = containerAppsEnvironment.outputs.environmentMode
 
 output defaultDomain string = containerAppsEnvironment.outputs.defaultDomain
 
-output containerAppId string = containerApp.outputs.containerAppId
-output containerAppFqdn string = containerApp.outputs.fqdn

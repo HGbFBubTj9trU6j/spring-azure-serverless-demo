@@ -1,10 +1,18 @@
+param(
+    [string]$Environment = "dev"
+)
+
 $ErrorActionPreference = "Stop"
 
-$acrName = "springazureserverlessdemoacr"
-$acrLoginServer = "$acrName.azurecr.io"
+$config = Import-PowerShellDataFile ".\config\$Environment.psd1"
 
-$resourceGroup = "spring-azure-serverless-demo-rg"
-$containerApp = "spring-azure-serverless-dev-ca"
+$location = $config.Location
+$acrName = $config.AcrName
+$resourceGroup = $config.ResourceGroup
+$containerAppName = $config.ContainerAppName
+$containerAppsEnvironmentName = $config.ContainerAppsEnvironmentName
+$identityName = $config.IdentityName
+$acrLoginServer = "$acrName.azurecr.io"
 
 $dirty = git status --porcelain
 
@@ -16,25 +24,67 @@ else {
 }
 
 $image = "$acrLoginServer/backend:$tag"
+$containerImage = "backend:$tag"
 
-Write-Host "Deploying image: $image"
+Write-Host "========================================"
+Write-Host "Deploy Backend"
+Write-Host "========================================"
+Write-Host "Image: $image"
+Write-Host ""
+
+Write-Host "Logging in to ACR..."
 
 az acr login `
-  --name $acrName
+    --name $AcrName
+
+if ($LASTEXITCODE -ne 0) {
+    throw "ACR login failed."
+}
+
+Write-Host "Pushing image..."
 
 docker push $image
 
-az containerapp update `
-  --name $containerApp `
-  --resource-group $resourceGroup `
-  --image $image
+if ($LASTEXITCODE -ne 0) {
+    throw "Docker push failed."
+}
 
-az containerapp show `
-  --name $containerApp `
-  --resource-group $resourceGroup `
-  --query properties.template.containers[0].image `
-  -o tsv
+$environmentId = az containerapp env show `
+    --name $ContainerAppsEnvironmentName `
+    --resource-group $ResourceGroup `
+    --query id `
+    -o tsv
+
+$identityId = az identity show `
+    --name $IdentityName `
+    --resource-group $ResourceGroup `
+    --query id `
+    -o tsv
+
+Write-Host "Deploying Container App..."
+
+az deployment group create `
+    --name backend `
+    --resource-group $ResourceGroup `
+    --template-file .\infra\modules\container-app.bicep `
+    --parameters `
+        location=$location `
+        containerAppName=$ContainerAppName `
+        containerAppsEnvironmentId=$environmentId `
+        containerRegistryLoginServer=$acrLoginServer `
+        containerImage=$containerImage `
+        identityId=$identityId
+
+if ($LASTEXITCODE -ne 0) {
+    throw "Container App deployment failed."
+}
 
 Write-Host ""
 Write-Host "Deployment completed."
 Write-Host "Image: $image"
+
+az containerapp show `
+    --name $ContainerAppName `
+    --resource-group $ResourceGroup `
+    --query "{fqdn:properties.configuration.ingress.fqdn,image:properties.template.containers[0].image}" `
+    --output table
