@@ -4,7 +4,9 @@ param(
     [string]$ApplicationDisplayName = "spring-azure-serverless-demo-auth",
 
     [ValidateRange(1, 2)]
-    [int]$ValidityYears = 1
+    [int]$ValidityYears = 1,
+
+    [switch]$CreateNew
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,6 +14,10 @@ $ErrorActionPreference = "Stop"
 Write-Host "========================================"
 Write-Host "Create Client Secret"
 Write-Host "========================================"
+
+#
+# Authentication tenant
+#
 
 Write-Host ""
 Write-Host "Detecting authentication tenant..."
@@ -30,24 +36,45 @@ if (-not $currentTenantId) {
 
 Write-Host "Authentication Tenant : $currentTenantId"
 
+#
+# App Registration
+#
+
 Write-Host ""
 Write-Host "Finding App Registration..."
 
-$appId = az ad app list `
+$appResultsJson = az ad app list `
     --display-name $ApplicationDisplayName `
-    --query "[0].appId" `
-    --output tsv
+    --query "[].{id:id,appId:appId,displayName:displayName}" `
+    --output json
 
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to search for the App Registration."
 }
 
-if (-not $appId) {
+$appResults = @($appResultsJson | ConvertFrom-Json)
+
+if ($appResults.Count -gt 1) {
+    throw "Multiple App Registrations were found with the display name '$ApplicationDisplayName'. Use a unique application display name."
+}
+
+if ($appResults.Count -eq 0) {
     throw "App Registration was not found: $ApplicationDisplayName"
+}
+
+$app = $appResults[0]
+$appId = $app.appId
+
+if (-not $appId) {
+    throw "The Application Client ID could not be determined."
 }
 
 Write-Host "Application Name      : $ApplicationDisplayName"
 Write-Host "Application Client ID : $appId"
+
+#
+# Existing credentials
+#
 
 Write-Host ""
 Write-Host "Checking existing credentials..."
@@ -65,22 +92,43 @@ $credentials = @($credentialsJson | ConvertFrom-Json)
 if ($credentials.Count -gt 0) {
 
     Write-Host ""
-    Write-Host "A Client Secret already exists."
+    Write-Host "Existing Client Secret credential(s) were found."
     Write-Host ""
-    Write-Host "No action was required."
-    Write-Host "A new Client Secret was not created."
-    Write-Host ""
-    Write-Host "The existing Client Secret cannot be retrieved."
-    Write-Host ""
-    Write-Host "43-configure-swa-auth.ps1 is only required"
-    Write-Host "when a new Client Secret has been created."
-    Write-Host ""
-    Write-Host "If Azure Static Web Apps authentication is already working,"
-    Write-Host "no further action is required."
-    Write-Host ""
+    Write-Host "The existing Client Secret values cannot be retrieved."
 
-    return
+    if (-not $CreateNew) {
+
+        Write-Host ""
+        Write-Host "No action was required."
+        Write-Host "A new Client Secret was not created."
+        Write-Host ""
+        Write-Host "If Azure Static Web Apps authentication is already working,"
+        Write-Host "no further action is required."
+        Write-Host ""
+        Write-Host "If authentication must be configured for a new"
+        Write-Host "Azure Static Web App, run this script again with:"
+        Write-Host ""
+        Write-Host "    -CreateNew"
+        Write-Host ""
+        Write-Host "This creates an additional Client Secret without"
+        Write-Host "removing the existing credentials."
+        Write-Host ""
+
+        return
+    }
+
+    Write-Host ""
+    Write-Host "CreateNew was specified."
+    Write-Host "An additional Client Secret will be created."
 }
+else {
+    Write-Host ""
+    Write-Host "No existing Client Secret credentials were found."
+}
+
+#
+# Create Client Secret
+#
 
 Write-Host ""
 Write-Host "Creating Client Secret..."
@@ -102,6 +150,10 @@ $clientSecret = $credential.password
 if (-not $clientSecret) {
     throw "The Client Secret value was not returned."
 }
+
+#
+# Result
+#
 
 Write-Host ""
 Write-Host "========================================"

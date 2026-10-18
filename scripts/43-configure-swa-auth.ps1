@@ -1,12 +1,8 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
     [ValidateNotNullOrEmpty()]
-    [string]$StaticWebAppName,
-
-    [Parameter(Mandatory = $true)]
-    [ValidateNotNullOrEmpty()]
-    [string]$ResourceGroupName,
+    [ValidatePattern('^[A-Za-z0-9_-]+$')]
+    [string]$Environment = "dev",
 
     [Parameter(Mandatory = $true)]
     [ValidatePattern(
@@ -24,6 +20,38 @@ $ErrorActionPreference = "Stop"
 Write-Host "========================================"
 Write-Host "Configure SWA Authentication"
 Write-Host "========================================"
+
+#
+# Environment configuration
+#
+
+Write-Host ""
+Write-Host "Loading environment configuration..."
+
+$projectRoot = Split-Path -Parent $PSScriptRoot
+$configPath = Join-Path $projectRoot "config\$Environment.psd1"
+
+if (-not (Test-Path $configPath)) {
+    throw "Environment configuration file was not found: $configPath"
+}
+
+$config = Import-PowerShellDataFile $configPath
+
+$staticWebAppName = $config.StaticWebAppName
+$resourceGroupName = $config.ResourceGroup
+
+if (-not $staticWebAppName) {
+    throw "StaticWebAppName is not defined in $configPath."
+}
+
+if (-not $resourceGroupName) {
+    throw "ResourceGroup is not defined in $configPath."
+}
+
+Write-Host "Environment    : $Environment"
+Write-Host "Configuration  : $configPath"
+Write-Host "Static Web App : $staticWebAppName"
+Write-Host "Resource Group : $resourceGroupName"
 
 #
 # Azure CLI context
@@ -75,22 +103,21 @@ Write-Host ""
 Write-Host "Checking Azure Static Web App..."
 
 $staticWebAppJson = az staticwebapp show `
-    --name $StaticWebAppName `
-    --resource-group $ResourceGroupName `
-    --query "{
-        name:name,
-        resourceGroup:resourceGroup,
-        defaultHostname:defaultHostname
-    }" `
+    --name $staticWebAppName `
+    --resource-group $resourceGroupName `
+    --query "{name:name,resourceGroup:resourceGroup,defaultHostname:defaultHostname}" `
     --output json
 
 if ($LASTEXITCODE -ne 0) {
     throw @"
-Azure Static Web App was not found in the active subscription.
+Failed to retrieve the Azure Static Web App.
 
-Static Web App : $StaticWebAppName
-Resource Group : $ResourceGroupName
+Environment    : $Environment
+Static Web App : $staticWebAppName
+Resource Group : $resourceGroupName
 Subscription   : $($account.subscriptionId)
+
+Check the Azure CLI error displayed above.
 "@
 }
 
@@ -98,6 +125,10 @@ $staticWebApp = $staticWebAppJson | ConvertFrom-Json
 
 if (-not $staticWebApp.name) {
     throw "The Azure Static Web App could not be retrieved."
+}
+
+if (-not $staticWebApp.defaultHostname) {
+    throw "The Azure Static Web App default hostname could not be determined."
 }
 
 Write-Host "Static Web App : $($staticWebApp.name)"
@@ -125,8 +156,8 @@ try {
     Write-Host "Configuring Azure Static Web Apps authentication settings..."
 
     az staticwebapp appsettings set `
-        --name $StaticWebAppName `
-        --resource-group $ResourceGroupName `
+        --name $staticWebAppName `
+        --resource-group $resourceGroupName `
         --setting-names `
             "AZURE_CLIENT_ID=$ClientId" `
             "AZURE_CLIENT_SECRET=$clientSecretPlainText" `
@@ -144,21 +175,32 @@ finally {
 }
 
 #
-# Verify Client ID
+# Verify application settings
 #
 
 Write-Host ""
-Write-Host "Verifying Application Client ID..."
+Write-Host "Verifying Azure Static Web Apps authentication settings..."
 
-$configuredClientId = az staticwebapp appsettings list `
-    --name $StaticWebAppName `
-    --resource-group $ResourceGroupName `
-    --query "properties.AZURE_CLIENT_ID" `
-    --output tsv
+$appSettingsJson = az staticwebapp appsettings list `
+    --name $staticWebAppName `
+    --resource-group $resourceGroupName `
+    --output json
 
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to verify the Azure Static Web Apps application settings."
 }
+
+$appSettings = $appSettingsJson | ConvertFrom-Json
+
+if (-not $appSettings.properties) {
+    throw "Azure Static Web Apps application settings could not be retrieved."
+}
+
+#
+# Verify Client ID
+#
+
+$configuredClientId = $appSettings.properties.AZURE_CLIENT_ID
 
 if ($configuredClientId -ne $ClientId) {
     throw @"
@@ -169,35 +211,35 @@ Actual Client ID   : $configuredClientId
 "@
 }
 
+Write-Host "Application Client ID : Verified"
+
 #
-# Verify that the Client Secret setting exists without retrieving its value
+# Verify that the Client Secret setting exists
+# without displaying its value
 #
 
-Write-Host "Verifying Client Secret setting..."
+$clientSecretProperty =
+    $appSettings.properties.PSObject.Properties["AZURE_CLIENT_SECRET"]
 
-$settingNamesJson = az staticwebapp appsettings list `
-    --name $StaticWebAppName `
-    --resource-group $ResourceGroupName `
-    --query "keys(properties)" `
-    --output json
-
-if ($LASTEXITCODE -ne 0) {
-    throw "Failed to verify the Client Secret setting."
-}
-
-$settingNames = @($settingNamesJson | ConvertFrom-Json)
-
-if ("AZURE_CLIENT_SECRET" -notin $settingNames) {
+if (-not $clientSecretProperty) {
     throw "AZURE_CLIENT_SECRET was not found in the application settings."
 }
+
+Write-Host "Client Secret         : Verified"
+
+#
+# Result
+#
 
 Write-Host ""
 Write-Host "========================================"
 Write-Host "SWA Authentication Configured"
 Write-Host "========================================"
 Write-Host ""
-Write-Host "Static Web App        : $StaticWebAppName"
-Write-Host "Resource Group        : $ResourceGroupName"
+Write-Host "Environment           : $Environment"
+Write-Host "Static Web App        : $staticWebAppName"
+Write-Host "Resource Group        : $resourceGroupName"
+Write-Host "Hostname              : $($staticWebApp.defaultHostname)"
 Write-Host "Application Client ID : $ClientId"
 Write-Host "Client Secret         : Configured"
 Write-Host ""

@@ -99,6 +99,9 @@ spring-azure-serverless-demo/
 │   ├── deploy-backend.ps1
 │   ├── build-frontend.ps1
 │   ├── deploy-frontend.ps1
+│   ├── 41-deploy-identity.ps1
+│   ├── 42-create-client-secret.ps1
+│   ├── 43-configure-swa-auth.ps1
 │   └── staticwebapp.config.template.json
 ├── docs/
 │   ├── architecture.md
@@ -198,6 +201,9 @@ Build frontend
 Deploy frontend
         │
         ▼
+Configure Microsoft Entra ID authentication
+        │
+        ▼
 Verify authentication and connectivity
 ```
 
@@ -224,6 +230,7 @@ Tenant B
 ├─ App Registration
 └─ Service Principal
 ```
+The Azure subscription and authentication tenant have independent lifecycles. The Azure resources can be rebuilt in another subscription while the existing App Registration in the authentication tenant is reused.
 
 The Azure infrastructure must be provisioned before the authentication infrastructure because the Microsoft Entra ID application requires the Azure Static Web Apps hostname when configuring its redirect URI.
 
@@ -278,7 +285,13 @@ At this stage:
 - The application is deployed
 - The SWA hostname can be determined
 
-### Step 3: Deploy the Authentication Infrastructure
+### Step 3: Configure Microsoft Entra ID Authentication
+
+Authentication configuration spans two different Microsoft Entra ID tenants.
+
+The identity resources are managed in the authentication tenant, while the Azure Static Web Apps application settings are configured in the Azure subscription tenant.
+
+#### Obtain the Azure Static Web Apps hostname
 
 Before switching to the authentication tenant, obtain the Azure Static Web Apps hostname.
 
@@ -293,52 +306,130 @@ az staticwebapp show `
 Example output:
 
 ```text
-thankful-river-038bb0d00.6.azurestaticapps.net
+<STATIC_WEB_APP_HOSTNAME>
 ```
 
-Switch to the authentication tenant.
-
-Verify the active tenant:
-
-```powershell
-az account show
-```
-
-Expected:
-
-```text
-tenantId = <AUTHENTICATION_TENANT_ID>
-```
+#### Switch to the authentication tenant.
 
 If necessary, sign in to the authentication tenant:
 
 ```powershell
-az login --tenant <AUTHENTICATION_TENANT_ID> --allow-no-subscriptions
+az login `
+  --tenant <AUTHENTICATION_TENANT_ID> `
+  --allow-no-subscriptions
 ```
 
-Deploy the Microsoft Entra ID resources:
+Verify the active tenant:
 
 ```powershell
-.\scripts\deploy-identity.ps1 `
+az account show `
+  --query tenantId `
+  --output tsv
+```
+
+#### Create or update the App Registration
+
+Run:
+
+```powershell
+.\scripts\41-deploy-identity.ps1 `
   -StaticWebAppHostname "<STATIC_WEB_APP_HOSTNAME>"
 ```
 
 This creates or updates:
-
 - App Registration
 - Service Principal
 - Redirect URI
-- ID Token configuration
-- Client Secret
-- Azure Static Web Apps authentication settings
+- ID token configuration
 
-The redirect URI uses the Azure Static Web Apps hostname created during Step 1.
 
-Example:
+The redirect URI uses the Azure Static Web Apps hostname:
 
 ```text
 https://<STATIC_WEB_APP_HOSTNAME>/.auth/login/aad/callback
 ```
+The existing App Registration is reused when possible.
+
+#### Prepare the Client Secret
+
+Run:
+
+```powershell
+.\scripts\42-create-client-secret.ps1
+```
+If no Client Secret exists, the script creates one.
+
+If an existing credential is found, the script does not create another Client Secret by default.
+
+Existing Client Secret values cannot be retrieved after creation.
+
+When configuring a newly deployed Azure Static Web App, such as after rebuilding the Azure environment in another subscription, create an additional Client Secret:
+
+```powershell
+.\scripts\42-create-client-secret.ps1 -CreateNew
+```
+The existing credentials are preserved.
+
+Store the newly created Client Secret only temporarily and use it immediately when configuring Azure Static Web Apps. Do not add it to the repository.
+
+#### Switch back to the Azure subscription tenant
+
+Sign in to the tenant that contains the target Azure subscription and select the target subscription.
+
+Verify the active Azure CLI context:
+
+```powershell
+az login `
+  --tenant <AZURE_SUBSCRIPTION_TENANT_ID>
+
+az account set `
+  --subscription <AZURE_SUBSCRIPTION_ID>
+
+az account show `
+  --query "{tenantId:tenantId,subscriptionId:id,subscriptionName:name}" `
+  --output table
+```
+
+#### Configure Azure Static Web Apps authentication
+
+Store the new Client Secret as a SecureString:
+
+```powershell
+$clientId = "<APPLICATION_CLIENT_ID>"
+
+$clientSecret = Read-Host `
+  "Enter the newly created Client Secret" `
+  -AsSecureString
+```
+
+Configure Azure Static Web Apps:
+
+```powershell
+.\scripts\43-configure-swa-auth.ps1 `
+  -ClientId $clientId `
+  -ClientSecret $clientSecret
+```
+By default, the script loads the Azure Static Web Apps name and Resource Group from:
+
+```text
+config/dev.psd1
+```
+A different environment can be selected with:
+
+```powershell
+.\scripts\43-configure-swa-auth.ps1 `
+  -Environment prod `
+  -ClientId $clientId `
+  -ClientSecret $clientSecret
+```
+
+The script verifies that:
+
+- The target Azure Static Web App exists in the active subscription.
+- The Application Client ID was configured.
+- The Client Secret setting exists.
+
+The Client Secret is not written to a file or displayed by the script.
 
 ### Step 4: Verify Authentication
 
@@ -540,7 +631,6 @@ The `-dirty` suffix indicates that the image was built from a working tree conta
 
 ---
 
-Deploy the Backend
 ## Deploy the Backend
 
 ```powershell
@@ -675,7 +765,7 @@ A generated configuration is written to:
 frontend/dist/staticwebapp.config.json
 ```
 
-Tenant-specific values are injected during the build process and should not be hard-coded in committed generated files.
+Tenant-specific authentication values are supplied during the authentication configuration and build processes and should not be hard-coded in committed generated files.
 
 The Azure Static Web Apps resource must have application settings corresponding to the setting names referenced by the generated configuration.
 

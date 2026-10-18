@@ -1,4 +1,14 @@
 # build-frontend.ps1
+param(
+    [string]$Environment = "dev"
+)
+
+$ErrorActionPreference = "Stop"
+
+$config = Import-PowerShellDataFile ".\config\$Environment.psd1"
+
+$resourceGroup = $config.ResourceGroup
+$containerApp = $config.ContainerAppName
 
 if (-not $env:ENTRA_TENANT_ID) {
     throw "ENTRA_TENANT_ID environment variable is not set."
@@ -16,9 +26,6 @@ $config = $template.Replace(
 Set-Content `
   "frontend/public/staticwebapp.config.json" `
   $config
-
-$resourceGroup = "spring-azure-serverless-demo-rg"
-$containerApp = "spring-azure-serverless-dev-ca"
 
 $fqdn = az containerapp show `
   --name $containerApp `
