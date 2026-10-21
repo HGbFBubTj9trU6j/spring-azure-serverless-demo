@@ -1,8 +1,9 @@
 import { useState } from 'react'
+import './App.css'
 
 function App() {
 
-    const [message, setMessage] = useState('')
+    const [fortune, setFortune] = useState('')
 
     const buildVersion =
         import.meta.env.VITE_BUILD_VERSION
@@ -19,16 +20,16 @@ function App() {
                 'http://localhost:8080'
 
             const response = await fetch(
-                `${apiBaseUrl}/api/hello`
+                `${apiBaseUrl}/api/fortune`
             )
 
             const data = await response.json()
 
-            setMessage(data.message)
+            setFortune(data.fortune)
 
         } catch (error) {
 
-            setMessage('error')
+            setFortune('Unable to get a fortune.')
 
             console.error(error)
         }
@@ -39,10 +40,10 @@ function App() {
             <h1>Azure Container Apps Express Demo</h1>
 
             <button onClick={callApi}>
-                API呼び出し
+                Get Fortune
             </button>
 
-            <p>message: {message}</p>
+            <p className="fortune">Fortune: {fortune}</p>
 
             <hr />
 
