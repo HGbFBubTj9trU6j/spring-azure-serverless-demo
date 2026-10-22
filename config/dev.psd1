@@ -16,4 +16,8 @@
     StaticWebAppLocation         = "eastasia"
 
     StaticWebAppSku              = "Standard"
+
+    # Azure SQL
+    SqlServerName                = "spring-azure-serverless-demo-dev-sql"
+    SqlDatabaseName              = "fortune"
 }
