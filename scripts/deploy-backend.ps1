@@ -12,6 +12,8 @@ $resourceGroup = $config.ResourceGroup
 $containerAppName = $config.ContainerAppName
 $containerAppsEnvironmentName = $config.ContainerAppsEnvironmentName
 $identityName = $config.IdentityName
+$sqlServerName = $config.SqlServerName
+$sqlDatabaseName = $config.SqlDatabaseName
 $acrLoginServer = "$acrName.azurecr.io"
 
 $dirty = git status --porcelain
@@ -61,6 +63,12 @@ $identityId = az identity show `
     --query id `
     -o tsv
 
+$identityClientId = az identity show `
+    --name $IdentityName `
+    --resource-group $ResourceGroup `
+    --query clientId `
+    -o tsv
+
 Write-Host "Deploying Container App..."
 
 az deployment group create `
@@ -73,7 +81,10 @@ az deployment group create `
         containerAppsEnvironmentId=$environmentId `
         containerRegistryLoginServer=$acrLoginServer `
         containerImage=$containerImage `
-        identityId=$identityId
+        identityId=$identityId `
+        identityClientId=$identityClientId `
+        sqlServerName=$sqlServerName `
+        sqlDatabaseName=$sqlDatabaseName
 
 if ($LASTEXITCODE -ne 0) {
     throw "Container App deployment failed."
