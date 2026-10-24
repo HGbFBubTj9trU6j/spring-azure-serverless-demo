@@ -1,3 +1,46 @@
 .fortune {
     white-space: pre-line;
 }
+/* Fortune Management */
+
+section {
+    margin-top: 2rem;
+}
+
+section > div {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+section input {
+    flex: 1;
+    padding: 0.6rem 0.8rem;
+}
+
+section ul {
+    padding: 0;
+    list-style: none;
+}
+
+section li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #ddd;
+}
+
+section li span {
+    text-align: left;
+    white-space: pre-line;
+}
+
+section li button {
+    flex-shrink: 0;
+}
+
+section [role="alert"] {
+    color: #c62828;
+}

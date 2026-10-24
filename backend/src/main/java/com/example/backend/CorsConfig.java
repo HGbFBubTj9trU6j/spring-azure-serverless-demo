@@ -14,7 +14,8 @@ public class CorsConfig implements WebMvcConfigurer {
         registry.addMapping("/api/**")
                 .allowedOriginPatterns(
                         "https://*.azurestaticapps.net",
-                        "http://localhost:5173"
+                        "http://localhost:5173",
+                        "http://localhost:4173"
                 )
                 .allowedMethods("*")
                 .allowedHeaders("*");
