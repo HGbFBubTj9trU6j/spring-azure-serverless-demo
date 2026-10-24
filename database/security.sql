@@ -7,8 +7,20 @@ END;
 IF IS_ROLEMEMBER(
     N'db_datareader',
     N'$(ManagedIdentityName)'
-) <> 1
+) = 1
 BEGIN
     ALTER ROLE db_datareader
-    ADD MEMBER [$(ManagedIdentityName)];
+    DROP MEMBER [$(ManagedIdentityName)];
 END;
+
+GRANT SELECT
+ON OBJECT::dbo.fortunes
+TO [$(ManagedIdentityName)];
+
+GRANT INSERT
+ON OBJECT::dbo.fortunes
+TO [$(ManagedIdentityName)];
+
+GRANT DELETE
+ON OBJECT::dbo.fortunes
+TO [$(ManagedIdentityName)];

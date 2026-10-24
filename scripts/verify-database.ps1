@@ -68,6 +68,19 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host ""
+Write-Host "Managed Identity object permissions"
+Write-Host "----------------------------------------"
+
+sqlcmd `
+    -S $sqlServerFqdn `
+    -d $database `
+    -G `
+    -Q "SELECT CAST(p.permission_name AS varchar(32)) AS permission_name, CAST(p.state_desc AS varchar(32)) AS state_desc, CAST(OBJECT_SCHEMA_NAME(p.major_id) AS varchar(32)) AS schema_name, CAST(OBJECT_NAME(p.major_id) AS varchar(32)) AS object_name FROM sys.database_permissions p JOIN sys.database_principals dp ON p.grantee_principal_id = dp.principal_id WHERE dp.name = '$managedIdentityName' AND p.class_desc = 'OBJECT_OR_COLUMN' ORDER BY p.permission_name;"
+
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to verify the Managed Identity object permissions."
+}
+
 Write-Host "========================================"
 Write-Host "Database verification completed."
 Write-Host "========================================"
