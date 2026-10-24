@@ -27,7 +27,9 @@ Push-Location backend
 try {
     & .\mvnw.cmd clean spring-boot:build-image `
         "-Dspring-boot.build-image.imageName=$image" `
-        "-Dbuild.version=$tag"
+        "-Dbuild.version=$tag" `
+        "-Dspring-boot.build-image.builder=paketobuildpacks/builder-noble-java-tiny:0.0.197" `
+        "-Dspring-boot.build-image.imagePlatform=linux/amd64"
 
     if ($LASTEXITCODE -ne 0) {
         throw "Backend image build failed."
