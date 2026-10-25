@@ -9,13 +9,38 @@ The current implementation combines:
 - Spring Boot
 - Azure Container Apps
 - Azure Container Registry
+- Azure SQL Database
 - Microsoft Entra ID authentication
+- User Assigned Managed Identity
 - Infrastructure as Code with Bicep
 - Cloud Native Buildpacks
 
-The frontend is hosted on Azure Static Web Apps and communicates with a Spring Boot REST API running on Azure Container Apps.
+The React frontend is hosted on Azure Static Web Apps and communicates with a Spring Boot REST API running on Azure Container Apps.
+
+Application data is stored in Azure SQL Database. The deployed backend accesses the database through a User Assigned Managed Identity.
 
 > This repository is intended for learning, experimentation, and architecture validation. Review all settings before using the project in a production environment.
+
+---
+
+## Current Implementation
+
+The application currently supports:
+
+- Microsoft Entra ID authentication through Azure Static Web Apps
+- Authenticated access to the React frontend
+- Random Fortune retrieval
+- Azure SQL-backed Fortune data
+- Resource-backed and database-backed Spring profiles
+- Fortune listing
+- Fortune creation
+- Fortune deletion
+- Fortune Management through the React frontend
+- Managed Identity-based Azure SQL access
+- Least-privilege, object-level database permissions
+- Azure infrastructure deployment with Bicep
+- Backend OCI image creation with Cloud Native Buildpacks
+- Script-based build, deployment, and verification
 
 ---
 
@@ -26,20 +51,36 @@ The frontend is hosted on Azure Static Web Apps and communicates with a Spring B
 - [x] Step 1: Azure infrastructure provisioning with Bicep
 - [x] Step 2: React frontend integration with Azure Static Web Apps
 - [x] Step 3: Microsoft Entra ID authentication
+- [x] Step 4: Data access
+  - [x] Step 4.1: Azure SQL Database infrastructure
+  - [x] Step 4.2: Azure SQL-backed Fortune data access
+  - [x] Step 4.3: Fortune management
+
+Step 4 implementation details are documented in:
+
+```text
+docs/step04-data-access.md
+```
 
 ### Planned
 
-- [ ] Step 4: Data access
 - [ ] Step 5: CI/CD
 - [ ] Step 6: API authentication and authorization
 - [ ] Step 7: Identity lifecycle management
 - [ ] Step 8: Replace Static Web Apps with a Buildpacks-based frontend container as an alternative architecture
 
+Future roadmap documents will use the following naming pattern:
+
+```text
+docs/step05-cicd.md
+docs/step06-api-authorization.md
+docs/step07-identity-lifecycle.md
+docs/step08-frontend-container.md
+```
+
 ---
 
 ## Architecture
-
-### Azure environment
 
 ```text
 Browser
@@ -56,22 +97,27 @@ Azure Static Web Apps
 Azure Container Apps
   │
   └── Spring Boot REST API
+        │
+        │ User Assigned Managed Identity
+        ▼
+Azure SQL Database
+  │
+  └── dbo.fortunes
 ```
 
-### Local development
+Azure Static Web Apps provides the authenticated frontend entry point.
+
+Azure Container Apps hosts the Spring Boot backend.
+
+Azure SQL Database provides persistent Fortune data.
+
+The backend accesses Azure SQL through a User Assigned Managed Identity without storing a database password in the application.
+
+For the current system structure, component responsibilities, identity boundaries, and data-access profiles, see:
 
 ```text
-React + Vite
-localhost:5173
-  │
-  ▼
-Spring Boot
-localhost:8080
+docs/architecture.md
 ```
-
-During local development, the frontend uses the local backend when `VITE_API_BASE_URL` is not set.
-
-For additional architectural details and design decisions, see docs/architecture.md.
 
 ---
 
@@ -80,67 +126,43 @@ For additional architectural details and design decisions, see docs/architecture
 ```text
 spring-azure-serverless-demo/
 ├── backend/
+│   └── Spring Boot application
+│
 ├── frontend/
+│   └── React + Vite application
+│
+├── database/
+│   └── Azure SQL schema, seed data, and security configuration
+│
 ├── config/
-│   └── dev.psd1
+│   └── Environment-specific non-secret configuration
+│
 ├── infra/
-│   ├── main.bicep
-│   ├── dev.bicepparam
-│   └── modules/
-│       ├── container-apps-environment.bicep
-│       ├── container-registry.bicep
-│       ├── container-app-identity.bicep
-│       ├── container-app.bicep
-│       └── static-web-app.bicep
+│   └── Azure infrastructure defined with Bicep
+│
 ├── scripts/
-│   ├── whatif-infra.ps1
-│   ├── deploy-infra.ps1
-│   ├── build-backend.ps1
-│   ├── deploy-backend.ps1
-│   ├── build-frontend.ps1
-│   ├── deploy-frontend.ps1
-│   ├── 41-deploy-identity.ps1
-│   ├── 42-create-client-secret.ps1
-│   ├── 43-configure-swa-auth.ps1
-│   └── staticwebapp.config.template.json
+│   └── Build, deployment, configuration, and verification scripts
+│
 ├── docs/
-│   ├── architecture.md
-│   ├── authentication.md
-│   ├── authentication-setup.md
-│   ├── deployment.md
-│   └── troubleshooting.md
-└── swa-cli.config.json
+│   └── Roadmap and reference documentation
+│
+├── swa-cli.config.json
+└── README.md
 ```
 
-Environment-specific settings used by the application build and deployment scripts are stored under config.
-
-The default development environment uses:
-
-config/dev.psd1
-
----
-
-## Azure Infrastructure
-
-Azure infrastructure is defined with Bicep under the `infra` directory.
-
-The development environment consists of:
+Environment-specific non-secret settings are stored under:
 
 ```text
-Resource Group
-├── Azure Container Registry
-├── User Assigned Managed Identity
-│   └── AcrPull role assignment
-├── Azure Static Web Apps
-└── Azure Container Apps Environment
+config/
 ```
-The Azure Container App is deployed separately after the backend OCI image has been built and pushed to Azure Container Registry.
 
-Its configuration remains managed with Bicep through infra/modules/container-app.bicep.
+The default development environment is defined in:
 
-Azure Static Web Apps is deployed to East Asia because the service is not available in Japan East for the subscription and resource type used by this project.
+```text
+config/dev.psd1
+```
 
-The remaining development resources are deployed to Japan East.
+Secret values must not be stored in this file.
 
 ---
 
@@ -155,934 +177,463 @@ The following tools are required:
 - Maven Wrapper
 - Node.js and npm
 - Docker-compatible container runtime
-- Azure Static Web Apps CLI
 - Git
 - PowerShell
+- sqlcmd
 
-Install Azure Static Web Apps CLI:
-
-```powershell
-npm install -g @azure/static-web-apps-cli
-```
-
-Verify the installation:
-
-```powershell
-swa --version
-```
-
-Verify that the container runtime is available:
+Verify the local container runtime:
 
 ```powershell
 docker info
 ```
 
-> This project does not require a Dockerfile for the backend. The backend OCI image is created with Spring Boot Buildpacks. A Docker-compatible runtime is still required to execute the Buildpacks build locally.
+The backend does not require a Dockerfile.
+
+The backend OCI image is created with Spring Boot Buildpacks. A Docker-compatible runtime is still required to execute the Buildpacks build locally.
+
+Azure Static Web Apps CLI is invoked through `npx` by the frontend deployment script.
+
+A globally installed `swa` command is not required by the normal deployment flow.
+
+---
+
+## Required Environment Variables
+
+Some build and deployment operations require environment variables that must be prepared by the developer.
+
+```text
+ENTRA_TENANT_ID
+SWA_DEPLOYMENT_TOKEN
+```
+
+`ENTRA_TENANT_ID` is used when generating the Azure Static Web Apps authentication configuration.
+
+`SWA_DEPLOYMENT_TOKEN` is used when deploying the generated frontend to Azure Static Web Apps.
+
+Verify their availability without printing their values:
+
+```powershell
+if ($env:ENTRA_TENANT_ID) {
+    Write-Host "ENTRA_TENANT_ID is configured."
+}
+else {
+    Write-Host "ENTRA_TENANT_ID is not configured."
+}
+
+if ($env:SWA_DEPLOYMENT_TOKEN) {
+    Write-Host "SWA_DEPLOYMENT_TOKEN is configured."
+}
+else {
+    Write-Host "SWA_DEPLOYMENT_TOKEN is not configured."
+}
+```
+
+The following Vite values are generated by the frontend build process and are not normally prepared manually:
+
+```text
+VITE_API_BASE_URL
+VITE_BUILD_VERSION
+```
+
+Secret values must not be committed to the repository.
 
 ---
 
 ## Getting Started
 
-The deployment sequence is:
+The overall deployment flow is:
 
 ```text
+Verify prerequisites and Azure context
+        │
+        ▼
 Provision shared Azure infrastructure
         │
         ▼
-Build backend OCI image
+Deploy and verify Azure SQL
         │
         ▼
-Push image and deploy Container App
+Build the backend OCI image
         │
         ▼
-Build frontend
+Deploy the backend to Azure Container Apps
         │
         ▼
-Deploy frontend
+Build the React frontend
+        │
+        ▼
+Deploy the frontend to Azure Static Web Apps
         │
         ▼
 Configure Microsoft Entra ID authentication
         │
         ▼
-Verify authentication and connectivity
+Verify the deployed application
 ```
 
-For a more detailed deployment guide, see docs/deployment.md.
-
----
-
-## Deployment Order
-
-This solution spans two independent administrative boundaries:
+The primary application deployment scripts are:
 
 ```text
-Tenant A
-(Azure Subscription Tenant)
-│
-├─ Azure Static Web Apps
-├─ Azure Container Apps
-├─ Azure Container Registry
-└─ Managed Identity
-
-Tenant B
-(Authentication Tenant)
-│
-├─ App Registration
-└─ Service Principal
-```
-The Azure subscription and authentication tenant have independent lifecycles. The Azure resources can be rebuilt in another subscription while the existing App Registration in the authentication tenant is reused.
-
-The Azure infrastructure must be provisioned before the authentication infrastructure because the Microsoft Entra ID application requires the Azure Static Web Apps hostname when configuring its redirect URI.
-
-### Step 1: Deploy Azure Infrastructure
-
-Sign in to the Azure subscription tenant and deploy the infrastructure.
-
-```powershell
-.\scripts\deploy-infra.ps1
+scripts/whatif-infra.ps1
+scripts/deploy-infra.ps1
+scripts/deploy-database.ps1
+scripts/verify-database.ps1
+scripts/build-backend.ps1
+scripts/deploy-backend.ps1
+scripts/build-frontend.ps1
+scripts/deploy-frontend.ps1
 ```
 
-This creates:
-
-- Resource Group
-- Azure Container Registry
-- Azure Container Apps Environment
-- User Assigned Managed Identity
-- AcrPull role assignment
-- Azure Static Web Apps
-
-The Azure Container App is intentionally not created during infrastructure provisioning. It is deployed after the backend image has been built and pushed to Azure Container Registry.
-
-### Step 2: Deploy the Application
-
-#### Build and deploy the backend.
-
-```powershell
-.\scripts\build-backend.ps1
-.\scripts\deploy-backend.ps1
-```
-
-By default, the backend scripts use the dev environment configuration from config/dev.psd1.
-
-To use another environment configuration, specify the environment name:
-
-```powershell
-.\scripts\build-backend.ps1 -Environment prod
-.\scripts\deploy-backend.ps1 -Environment prod
-```
-
-#### Build and deploy the frontend.
-
-```powershell
-.\scripts\build-frontend.ps1
-.\scripts\deploy-frontend.ps1
-```
-
-At this stage:
-
-- Azure Static Web Apps is available
-- Azure Container Apps is available
-- The application is deployed
-- The SWA hostname can be determined
-
-### Step 3: Configure Microsoft Entra ID Authentication
-
-Authentication configuration spans two different Microsoft Entra ID tenants.
-
-The identity resources are managed in the authentication tenant, while the Azure Static Web Apps application settings are configured in the Azure subscription tenant.
-
-#### Obtain the Azure Static Web Apps hostname
-
-Before switching to the authentication tenant, obtain the Azure Static Web Apps hostname.
-
-```powershell
-az staticwebapp show `
-  --name spring-azure-serverless-demo-dev-swa `
-  --resource-group spring-azure-serverless-demo-rg `
-  --query defaultHostname `
-  --output tsv
-```
-
-Example output:
+Authentication setup uses:
 
 ```text
-<STATIC_WEB_APP_HOSTNAME>
+scripts/41-deploy-identity.ps1
+scripts/42-create-client-secret.ps1
+scripts/43-configure-swa-auth.ps1
 ```
 
-#### Switch to the authentication tenant.
-
-If necessary, sign in to the authentication tenant:
-
-```powershell
-az login `
-  --tenant <AUTHENTICATION_TENANT_ID> `
-  --allow-no-subscriptions
-```
-
-Verify the active tenant:
-
-```powershell
-az account show `
-  --query tenantId `
-  --output tsv
-```
-
-#### Create or update the App Registration
-
-Run:
-
-```powershell
-.\scripts\41-deploy-identity.ps1 `
-  -StaticWebAppHostname "<STATIC_WEB_APP_HOSTNAME>"
-```
-
-This creates or updates:
-- App Registration
-- Service Principal
-- Redirect URI
-- ID token configuration
-
-
-The redirect URI uses the Azure Static Web Apps hostname:
+For the complete deployment order, prerequisites, tenant switching, build settings, and verification commands, see:
 
 ```text
-https://<STATIC_WEB_APP_HOSTNAME>/.auth/login/aad/callback
+docs/deployment.md
 ```
-The existing App Registration is reused when possible.
-
-#### Prepare the Client Secret
-
-Run:
-
-```powershell
-.\scripts\42-create-client-secret.ps1
-```
-If no Client Secret exists, the script creates one.
-
-If an existing credential is found, the script does not create another Client Secret by default.
-
-Existing Client Secret values cannot be retrieved after creation.
-
-When configuring a newly deployed Azure Static Web App, such as after rebuilding the Azure environment in another subscription, create an additional Client Secret:
-
-```powershell
-.\scripts\42-create-client-secret.ps1 -CreateNew
-```
-The existing credentials are preserved.
-
-Store the newly created Client Secret only temporarily and use it immediately when configuring Azure Static Web Apps. Do not add it to the repository.
-
-#### Switch back to the Azure subscription tenant
-
-Sign in to the tenant that contains the target Azure subscription and select the target subscription.
-
-Verify the active Azure CLI context:
-
-```powershell
-az login `
-  --tenant <AZURE_SUBSCRIPTION_TENANT_ID>
-
-az account set `
-  --subscription <AZURE_SUBSCRIPTION_ID>
-
-az account show `
-  --query "{tenantId:tenantId,subscriptionId:id,subscriptionName:name}" `
-  --output table
-```
-
-#### Configure Azure Static Web Apps authentication
-
-Store the new Client Secret as a SecureString:
-
-```powershell
-$clientId = "<APPLICATION_CLIENT_ID>"
-
-$clientSecret = Read-Host `
-  "Enter the newly created Client Secret" `
-  -AsSecureString
-```
-
-Configure Azure Static Web Apps:
-
-```powershell
-.\scripts\43-configure-swa-auth.ps1 `
-  -ClientId $clientId `
-  -ClientSecret $clientSecret
-```
-By default, the script loads the Azure Static Web Apps name and Resource Group from:
-
-```text
-config/dev.psd1
-```
-A different environment can be selected with:
-
-```powershell
-.\scripts\43-configure-swa-auth.ps1 `
-  -Environment prod `
-  -ClientId $clientId `
-  -ClientSecret $clientSecret
-```
-
-The script verifies that:
-
-- The target Azure Static Web App exists in the active subscription.
-- The Application Client ID was configured.
-- The Client Secret setting exists.
-
-The Client Secret is not written to a file or displayed by the script.
-
-### Step 4: Verify Authentication
-
-Open the Azure Static Web Apps URL and verify:
-
-- Registered external users can sign in
-- Registered native tenant users can sign in
-- Unregistered users are denied access
-- Authentication information is available through `/.auth/me`
-
----
-
-## Build the Bicep Template
-
-Run the following command from the repository root:
-
-```powershell
-az bicep build `
-  --file .\infra\main.bicep
-```
-
-This generates:
-
-```text
-infra/main.json
-```
-
-`main.json` is a generated ARM template and should not be committed to Git.
-
-A warning similar to the following may be displayed:
-
-```text
-BCP081: Resource type does not have types available.
-```
-
-The project uses recent Azure Container Apps API versions:
-
-```text
-Microsoft.App/managedEnvironments@2026-07-01
-Microsoft.App/containerApps@2026-07-01
-```
-
-If matching Bicep type information is not available, Bicep cannot perform full compile-time property validation. This warning does not necessarily prevent deployment.
-
----
-
-## Preview Infrastructure Changes
-
-Run an Azure deployment What-If operation before applying infrastructure changes:
-
-```powershell
-az deployment sub what-if `
-  --name spring-azure-serverless-demo `
-  --location japaneast `
-  --parameters .\infra\dev.bicepparam
-```
-
-The following diagnostic may appear:
-
-```text
-NestedDeploymentShortCircuited
-```
-The infrastructure What-If operation covers the resources managed by infra/main.bicep.
-
-The Azure Container App is deployed separately by deploy-backend.ps1 and is therefore outside the infrastructure What-If scope.
-
-Azure may add service-managed properties to deployed resources. These properties can appear as modifications in later What-If results even when the Bicep-managed configuration has not changed.
-
----
-
-## Deploy the Infrastructure
-
-Run:
-
-```powershell
-.\scripts\deploy-infra.ps1
-```
-
-The script performs a subscription-scoped Bicep deployment because infra/main.bicep creates the Resource Group.
-
-This deployment creates the shared Azure infrastructure required before application deployment.
-
-The Azure Container App itself is deployed separately by deploy-backend.ps1.
 
 ---
 
 ## Local Development
 
-### Start the Spring Boot Backend
-
-```powershell
-Push-Location .\backend
-
-.\mvnw.cmd spring-boot:run
-
-Pop-Location
-```
-
-The backend listens on:
+The Spring Boot backend normally runs on:
 
 ```text
 http://localhost:8080
 ```
 
-Verify the API:
-
-```powershell
-Invoke-RestMethod `
-  "http://localhost:8080/api/hello"
-```
-
-Expected PowerShell output:
-
-```text
-message
--------
-hello
-```
-
-Verify the backend version endpoint:
-
-```powershell
-Invoke-RestMethod `
-  "http://localhost:8080/api/version"
-```
-
----
-
-### Start the React Frontend
-
-```powershell
-Push-Location .\frontend
-
-npm install
-npm run dev
-
-Pop-Location
-```
-
-The frontend development server listens on:
+The React development server normally runs on:
 
 ```text
 http://localhost:5173
 ```
 
-If `VITE_API_BASE_URL` is not supplied, the frontend uses the following local backend URL:
+When `VITE_API_BASE_URL` is not supplied, the frontend uses:
 
 ```text
 http://localhost:8080
 ```
 
-The Spring Boot CORS configuration permits requests from the local frontend origin:
+as the backend API base URL.
+
+The backend supports two data-access profiles:
+
+```text
+resource
+database
+```
+
+The `resource` profile reads Fortune data bundled with the application.
+
+The `database` profile uses Azure SQL Database.
+
+A frontend production build can also be tested locally through the Vite preview server:
+
+```text
+http://localhost:4173
+```
+
+The backend CORS configuration permits both local frontend origins:
 
 ```text
 http://localhost:5173
+http://localhost:4173
 ```
 
-It also permits Azure Static Web Apps origins matching:
+Step 4-specific local execution and data-access details are documented in:
 
 ```text
-https://*.azurestaticapps.net
+docs/step04-data-access.md
 ```
 
 ---
 
-## Build the Backend
+## Build and Deployment
 
-The backend image is built with Spring Boot Buildpacks through the Maven Wrapper.
+The backend image is built with Spring Boot Buildpacks.
 
-```powershell
-.\scripts\build-backend.ps1
-```
-
-By default, the script loads environment-specific settings from `config/dev.psd1`.
-
-A different environment can be selected with:
-
-```powershell
-.\scripts\build-backend.ps1 -Environment prod
-```
-
-The build script:
-
-1. Loads the selected environment configuration.
-2. Gets the current Git commit hash.
-3. Detects whether the working tree contains uncommitted changes.
-4. Generates an image tag.
-5. Runs a clean Spring Boot Buildpacks build.
-6. Creates an OCI image in the local container runtime.
-
-Example image tags:
+The build uses:
 
 ```text
-<registry>.azurecr.io/backend:abc1234
-<registry>.azurecr.io/backend:abc1234-dirty
+Paketo Noble Java Tiny Builder
+linux/amd64
 ```
 
-The `-dirty` suffix indicates that the image was built from a working tree containing uncommitted changes.
+A versioned builder image is used instead of relying on the mutable `latest` tag.
 
----
+The frontend build resolves the deployed Azure Container App endpoint and supplies it to Vite through:
 
-## Deploy the Backend
-
-```powershell
-.\scripts\deploy-backend.ps1
+```text
+VITE_API_BASE_URL
 ```
 
-By default, the script loads environment-specific settings from `config/dev.psd1`.
+The frontend deployment script invokes Azure Static Web Apps CLI through:
 
-A different environment can be selected with:
-
-```powershell
-.\scripts\deploy-backend.ps1 -Environment prod
+```text
+npx @azure/static-web-apps-cli
 ```
 
-The deployment script:
+Detailed build and deployment instructions are maintained in:
 
-1. Loads the selected environment configuration.
-2. Determines the image tag from the current Git state.
-3. Signs in to Azure Container Registry.
-4. Pushes the previously built OCI image.
-5. Resolves the Container Apps Environment and Managed Identity resource IDs.
-6. Deploys the Azure Container App using `infra/modules/container-app.bicep`.
-7. Displays the deployed Container App FQDN and image.
-
-The same Bicep deployment path is used for both the initial Container App creation and subsequent updates.
-
-Verify the deployed image:
-
-```powershell
-az containerapp show `
-  --name spring-azure-serverless-dev-ca `
-  --resource-group spring-azure-serverless-demo-rg `
-  --query properties.template.containers[0].image `
-  --output tsv
+```text
+docs/deployment.md
 ```
 
 ---
 
-## Verify the Container App
+## Authentication
 
-List the Container Apps:
+The application uses Microsoft Entra ID authentication through Azure Static Web Apps.
 
-```powershell
-az containerapp list `
-  --resource-group spring-azure-serverless-demo-rg `
-  --query "[].{name:name,state:properties.provisioningState,fqdn:properties.configuration.ingress.fqdn}" `
-  --output table
-```
+Azure Static Web Apps is currently the authenticated entry point for the React frontend.
 
-Get the Container App FQDN:
+The authentication resources belong to an authentication tenant that can have a lifecycle independent from the Azure subscription resources.
 
-```powershell
-$fqdn = az containerapp show `
-  --name spring-azure-serverless-dev-ca `
-  --resource-group spring-azure-serverless-demo-rg `
-  --query properties.configuration.ingress.fqdn `
-  --output tsv
-```
+The current backend does not yet independently validate and authorize the authenticated user's token.
 
-Verify the Spring Boot endpoint:
-
-```powershell
-Invoke-RestMethod `
-  "https://$fqdn/api/hello"
-```
-
-Expected PowerShell output:
+For the current authentication architecture, trust boundaries, verified user scenarios, and known limitations, see:
 
 ```text
-message
--------
-hello
+docs/authentication.md
 ```
 
-Verify the backend version endpoint:
+For the authentication provisioning and configuration procedure, see:
 
-```powershell
-Invoke-RestMethod `
-  "https://$fqdn/api/version"
+```text
+docs/authentication-setup.md
 ```
 
 ---
 
-## Build the Frontend
+## Data Access
 
-```powershell
-.\scripts\build-frontend.ps1
-```
+Azure SQL Database stores persistent Fortune data.
 
-The frontend build script:
+The deployed backend accesses Azure SQL through a User Assigned Managed Identity.
 
-1. Gets the Container App FQDN from Azure.
-2. Sets `VITE_API_BASE_URL` for the Vite build.
-3. Creates build-version metadata from the current Git commit.
-4. Adds the `-dirty` suffix when the working tree contains uncommitted changes.
-5. Generates the production authentication configuration from its template.
-6. Runs the Vite production build.
-
-The Container App API base URL is obtained from Azure instead of being stored as a production URL in source control.
-
-The build output is generated under:
+The application currently grants the Managed Identity the following object-level permissions on `dbo.fortunes`:
 
 ```text
-frontend/dist
+SELECT
+INSERT
+DELETE
 ```
 
-The generated authentication configuration is placed under:
+Broad fixed database role membership is not required by the current Fortune functionality.
+
+The application provides:
 
 ```text
-frontend/dist/staticwebapp.config.json
+GET    /api/fortune
+
+GET    /api/admin/fortunes
+POST   /api/admin/fortunes
+DELETE /api/admin/fortunes/{id}
 ```
 
-Do not manually edit files under `frontend/dist`. The directory contains generated build output.
-
----
-
-## Configure Microsoft Entra ID Authentication
-
-Authentication resources are deployed separately from the Azure infrastructure because they belong to a different Microsoft Entra ID tenant. See the Deployment Order section above and `docs/authentication-setup.md` for provisioning details.
-
-The project uses a custom Microsoft Entra ID provider for Azure Static Web Apps.
-
-The source template is stored at:
+For Azure SQL infrastructure, Spring profiles, repository design, database permissions, Fortune Management, and Step 4 verification details, see:
 
 ```text
-scripts/staticwebapp.config.template.json
-```
-
-A generated configuration is written to:
-
-```text
-frontend/dist/staticwebapp.config.json
-```
-
-Tenant-specific authentication values are supplied during the authentication configuration and build processes and should not be hard-coded in committed generated files.
-
-The Azure Static Web Apps resource must have application settings corresponding to the setting names referenced by the generated configuration.
-
-Sensitive values must not be committed to source control.
-
-Examples of values that must remain outside the repository include:
-
-- Client secrets
-- Deployment tokens
-- Tenant-specific secret values
-- Production credentials
-
-For authentication architecture, validation scenarios, and current limitations, see docs/authentication.md.
-
----
-
-## Configure the Static Web Apps Deployment Token
-
-Get the deployment token:
-
-```powershell
-$token = az staticwebapp secrets list `
-  --name spring-azure-serverless-demo-dev-swa `
-  --resource-group spring-azure-serverless-demo-rg `
-  --query properties.apiKey `
-  --output tsv
-```
-
-Store the token as a Windows user environment variable:
-
-```powershell
-[System.Environment]::SetEnvironmentVariable(
-  "SWA_DEPLOYMENT_TOKEN",
-  $token,
-  "User"
-)
-```
-
-Open a new PowerShell session after setting the user environment variable.
-
-Verify that the variable is available without printing its value:
-
-```powershell
-if ($env:SWA_DEPLOYMENT_TOKEN) {
-  Write-Host "SWA deployment token is configured."
-}
-else {
-  Write-Host "SWA deployment token is not configured."
-}
-```
-
-Do not store the deployment token in the repository.
-
----
-
-## Azure Static Web Apps CLI Configuration
-
-The `swa-cli.config.json` file contains the project configuration used by Azure Static Web Apps CLI.
-
-Review the resolved configuration:
-
-```powershell
-swa --print-config
-```
-
-The project uses:
-
-```text
-App location: frontend
-Output location: dist
-App build command: npm run build
-App development server URL: http://localhost:5173
+docs/step04-data-access.md
 ```
 
 ---
 
-## Deploy the Frontend to Production
+## Testing and Verification
 
-```powershell
-.\scripts\deploy-frontend.ps1
-```
+The project distinguishes between different verification purposes.
 
-The deployment script explicitly specifies:
+### Automated Tests
 
-```text
---env production
-```
+Backend and frontend automated tests verify application and component behavior without requiring the complete deployed user flow.
 
-This deploys the contents of `frontend/dist` to the Azure Static Web Apps production environment.
+### Local Feature Verification
 
-Equivalent command:
+Local feature verification confirms frontend and backend behavior during development.
 
-```powershell
-Push-Location .\frontend
+### Deployed Backend Feature Verification
 
-swa deploy `
-  .\dist `
-  --env production `
-  --deployment-token $env:SWA_DEPLOYMENT_TOKEN
+Direct API verification against Azure Container Apps confirms that the deployed backend and its Azure SQL access work correctly.
 
-Pop-Location
-```
+Individual API operations such as Fortune Management GET, POST, and DELETE are treated as deployed backend feature verification.
 
-If `--env production` is omitted, Azure Static Web Apps CLI uses its resolved environment configuration. In this project, that can result in deployment to the `preview` environment.
+They are not treated as the complete application E2E verification.
 
----
+### End-to-End Scenario Verification
 
-## Verify Static Web Apps Environments
+E2E verification is based on a user scenario.
 
-```powershell
-az staticwebapp environment list `
-  --name spring-azure-serverless-demo-dev-swa `
-  --resource-group spring-azure-serverless-demo-rg `
-  --output table
-```
+For Fortune Management, Azure Static Web Apps is the user entry point.
 
-The environment named `default` is the production environment.
+The verified scenario includes:
 
-The environment named `preview` is the preview environment.
+1. Signing in to the deployed application.
+2. Viewing existing Fortune records.
+3. Adding a Fortune through the React UI.
+4. Confirming that the Fortune appears in the management list.
+5. Using the application with the updated Fortune data.
+6. Deleting the added Fortune.
+7. Confirming that the Fortune disappears from the management list.
 
-After a successful production deployment, the `default` environment should have the following status:
+The purpose of this verification is to confirm that the user's intended workflow succeeds through the deployed application.
+
+Step 4-specific test and verification details are documented in:
 
 ```text
-Ready
+docs/step04-data-access.md
 ```
 
 ---
 
-## Verify the Deployed Application
+## Documentation
 
-Get the Azure Static Web Apps production hostname:
+Documentation is divided into roadmap documents and cross-cutting reference documents.
 
-```powershell
-$swaHostname = az staticwebapp show `
-  --name spring-azure-serverless-demo-dev-swa `
-  --resource-group spring-azure-serverless-demo-rg `
-  --query defaultHostname `
-  --output tsv
+### Roadmap Documentation
 
-Write-Host "https://$swaHostname"
-```
+Roadmap documents describe the implementation and decisions introduced by a specific project step.
 
-Open the displayed URL in a browser.
-
-Verify that:
-
-- Unauthenticated access redirects to Microsoft Entra ID authentication.
-- A registered user can sign in.
-- The React page is displayed after authentication.
-- The frontend build version is displayed.
-- The backend build version can be retrieved.
-- The API call returns `hello`.
-- Logout completes successfully.
-
----
-
-## Microsoft Entra ID Authentication
-
-Azure Static Web Apps is integrated with Microsoft Entra ID and requires authentication before the application can be accessed.
-
-A dedicated Microsoft Entra ID tenant is used for:
-
-- App Registration
-- OpenID Connect configuration
-- Token issuance
-- User registration
-- Access control
-
-### Authentication Scenarios
-
-| User type | Registered in the authentication tenant | Expected result | Verified |
-| --- | ---: | --- | ---: |
-| External tenant user | Yes | Access granted | Yes |
-| Native authentication tenant user | Yes | Access granted | Yes |
-| Unregistered user | No | Access denied | Yes |
-
-The validation confirms that access is determined by registration in the authentication tenant rather than by the user's email domain.
-
-### Identity Verification
-
-After a successful sign-in, open:
+Currently available:
 
 ```text
-https://<STATIC_WEB_APP_HOSTNAME>/.auth/me
+docs/step04-data-access.md
 ```
 
-The endpoint was used to verify:
+Future roadmap documents will follow the same naming convention:
 
-- Authenticated user information
-- Authentication provider
-- Token audience
-- Token issuer
-- User roles
-- Successful identity propagation to Azure Static Web Apps
+```text
+docs/step05-cicd.md
+docs/step06-api-authorization.md
+docs/step07-identity-lifecycle.md
+docs/step08-frontend-container.md
+```
 
-No real user details, tenant IDs, client IDs, object IDs, or token values are included in this public repository.
+### Reference Documentation
 
-### Step 3 Exit Criteria
+Current architecture:
 
-- [x] Azure Static Web Apps integrated with Microsoft Entra ID
-- [x] Login verified
-- [x] Logout verified
-- [x] Post-login redirection verified
-- [x] Authenticated identity retrieved from `/.auth/me`
-- [x] Registered external user granted access
-- [x] Registered native tenant user granted access
-- [x] Unregistered user denied access
-- [x] Access control based on authentication-tenant registration verified
+```text
+docs/architecture.md
+```
 
-### Current Authentication Boundary
+Deployment and environment setup:
 
-Authentication is currently enforced at the Azure Static Web Apps layer.
+```text
+docs/deployment.md
+```
 
-The backend API is exposed through Azure Container Apps and does not yet independently validate the authenticated user's token.
+Authentication architecture and boundaries:
 
-API authentication and authorization are planned as a separate step.
+```text
+docs/authentication.md
+```
 
-For full details, see docs/authentication.md.
+Authentication provisioning and configuration:
 
-To reproduce the Microsoft Entra ID resources and SWA application settings, see docs/authentication-setup.md.
+```text
+docs/authentication-setup.md
+```
+
+Known issues, diagnostics, and resolutions:
+
+```text
+docs/troubleshooting.md
+```
 
 ---
 
 ## Security Notes
 
-Before publishing or deploying this repository, verify that it does not contain:
+Authentication is currently enforced at the Azure Static Web Apps layer.
 
-- Real tenant IDs
-- Client secrets
+The Azure Container Apps backend does not yet independently validate the authenticated user's token.
+
+API authentication and authorization are planned for Step 6.
+
+The backend uses a User Assigned Managed Identity for Azure SQL access and does not store a database password in application source.
+
+The database identity follows a least-privilege, object-level permission model.
+
+Do not commit:
+
+- Client Secrets
 - Azure Static Web Apps deployment tokens
-- Personal or company email addresses
 - Access tokens
 - Refresh tokens
+- ID tokens
 - Real `/.auth/me` responses
-- Generated files containing environment-specific values
-- Local environment files
+- Real user identities
 - Azure credentials
+- SQL credentials
 - Private certificates or keys
+- Generated files containing environment-specific values
+- Local environment files containing credentials
 
-Keep secret values outside Git.
-
-Suitable storage options include:
+Suitable secret-storage locations include:
 
 - Azure Static Web Apps application settings
 - GitHub Actions secrets
 - Azure Key Vault
 - Local user environment variables
 
-The public repository may contain setting names and templates, but it must not contain their secret values.
+For authentication-specific security boundaries, see:
 
----
-
-## Azure CLI Defaults
-
-Azure CLI defaults can affect commands that do not explicitly specify a Resource Group.
-
-Check configured defaults:
-
-```powershell
-az configure --list-defaults
+```text
+docs/authentication.md
 ```
 
-This project explicitly specifies the Resource Group where practical to reduce dependence on local Azure CLI configuration.
-
 ---
 
-## Known Diagnostics
+## Troubleshooting
 
-The following diagnostics were encountered during implementation:
+Known issues, diagnostic procedures, and validated resolutions are documented in:
 
-- Bicep `BCP081` warnings for recent Azure resource API versions
-- `NestedDeploymentShortCircuited` during What-If evaluation
-- Azure Static Web Apps deployment targeting Preview when Production was not explicitly specified
-- Microsoft Entra ID login failure when the required ID-token setting was not enabled
-- `401 Unauthorized` before completing the required sign-in flow
-- Container runtime connectivity issues during Buildpacks image creation
+```text
+docs/troubleshooting.md
+```
 
-See docs/troubleshooting.md for symptoms, causes, verification steps, and resolutions.
+Topics include:
 
----
-
-## Documentation
-
-- docs/architecture.md
-- docs/authentication.md
-- docs/authentication-setup.md
-- docs/deployment.md
-- docs/troubleshooting.md
+- Azure CLI tenant and subscription context
+- Bicep diagnostics
+- Azure SQL authentication
+- Managed Identity database permissions
+- Container runtime connectivity
+- Buildpacks architecture mismatch
+- Azure Container Apps log retrieval
+- Vite build-time environment variables
+- Vite preview CORS
+- Azure Static Web Apps CLI invocation
+- Vitest worker-pool behavior
+- Authentication and redirect failures
 
 ---
 
 ## Next Steps
 
-### Step 4: Data Access
+### Step 5: CI/CD
 
-The next step adds persistent data access through the Spring Boot backend.
+The next step introduces CI/CD automation.
 
-```text
-React
-  │
-  ▼
-Spring Boot REST API
-  │
-  ▼
-Data Store
-```
+The goal is to automate:
 
-Candidate services include:
+- Backend testing
+- Frontend testing
+- Backend OCI image creation
+- Infrastructure deployment
+- Database deployment verification
+- Backend deployment
+- Frontend build and deployment
+- Deployment verification
 
-- Azure SQL Database
-- Azure Cosmos DB
+Later roadmap work includes:
 
-### Later Steps
-
-Future work includes:
-
-- CI/CD with GitHub Actions
 - SWA-to-ACA token propagation
 - JWT validation in Spring Boot
 - Spring Security integration
@@ -1101,4 +652,6 @@ Future work includes:
 
 No license has been declared yet.
 
-Until a license is added, standard copyright rules apply. If reuse and contribution are intended, add an appropriate open-source license before publishing or accepting external contributions.
+Until a license is added, standard copyright rules apply.
+
+If reuse and contribution are intended, add an appropriate open-source license before publishing or accepting external contributions.
