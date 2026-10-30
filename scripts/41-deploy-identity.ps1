@@ -365,6 +365,83 @@ else {
 }
 
 #
+# Backend API App Role
+#
+
+Write-Host ""
+Write-Host "Checking Backend API App Role..."
+
+$apiAppJson = az ad app show `
+    --id $apiAppId `
+    --output json
+
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to retrieve the Backend API App Registration."
+}
+
+$apiApp = $apiAppJson | ConvertFrom-Json
+
+$fortuneAdminRole = @(
+    $apiApp.appRoles |
+        Where-Object { $_.value -eq "Fortune.Admin" }
+)
+
+if ($fortuneAdminRole.Count -gt 1) {
+    throw "Multiple 'Fortune.Admin' App Roles were found."
+}
+
+if ($fortuneAdminRole.Count -eq 0) {
+    Write-Host "Creating Fortune.Admin App Role..."
+
+    $fortuneAdminRoleId = [guid]::NewGuid().ToString()
+
+    $existingAppRoles = @($apiApp.appRoles)
+
+    $newAppRole = @{
+        id                 = $fortuneAdminRoleId
+        value              = "Fortune.Admin"
+        displayName        = "Fortune Administrator"
+        description        = "Allows management of Fortune data"
+        allowedMemberTypes = @("User")
+        isEnabled          = $true
+    }
+
+    $updatedAppRoles = @($existingAppRoles) + $newAppRole
+
+    $requestBody = @{
+        appRoles = $updatedAppRoles
+    } | ConvertTo-Json -Depth 10 -Compress
+
+    $tempFile = [System.IO.Path]::GetTempFileName()
+
+    try {
+        $requestBody | Set-Content `
+            -Path $tempFile `
+            -Encoding utf8 `
+            -NoNewline
+
+        az rest `
+            --method PATCH `
+            --url "https://graph.microsoft.com/v1.0/applications/$apiAppObjectId" `
+            --headers "Content-Type=application/json" `
+            --body "@$tempFile" `
+            --output none
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to create the Fortune.Admin App Role."
+        }
+    }
+    finally {
+        Remove-Item $tempFile -ErrorAction SilentlyContinue
+    }
+}
+else {
+    $fortuneAdminRoleId = $fortuneAdminRole[0].id
+
+    Write-Host "Fortune.Admin App Role already exists."
+}
+
+#
 # Backend API Service Principal
 #
 
@@ -442,3 +519,4 @@ Write-Host "Application Object ID    : $apiAppObjectId"
 Write-Host "Service Principal ID     : $($apiServicePrincipal.id)"
 Write-Host "Application ID URI       : $apiIdentifierUri"
 Write-Host "access_as_user Scope ID  : $accessAsUserScopeId"
+Write-Host "Fortune.Admin Role ID    : $fortuneAdminRoleId"
