@@ -8,7 +8,10 @@ param(
     [string]$AuthApplicationDisplayName = "spring-azure-serverless-demo-auth",
 
     [ValidateNotNullOrEmpty()]
-    [string]$ApiApplicationDisplayName = "spring-azure-serverless-demo-api"
+    [string]$ApiApplicationDisplayName = "spring-azure-serverless-demo-api",
+
+    [ValidateNotNullOrEmpty()]
+    [string]$ClientApplicationDisplayName = "spring-azure-serverless-demo-client"
 )
 
 $ErrorActionPreference = "Stop"
@@ -28,6 +31,10 @@ $StaticWebAppHostname = $StaticWebAppHostname `
 
 $redirectUri = "https://$StaticWebAppHostname/.auth/login/aad/callback"
 
+$clientRedirectUris = @(
+    "https://$StaticWebAppHostname",
+    "http://localhost:5173"
+)
 #
 # Authentication tenant
 #
@@ -442,6 +449,106 @@ else {
 }
 
 #
+# React SPA Client App Registration
+#
+
+Write-Host ""
+Write-Host "Checking React SPA Client App Registration..."
+
+$clientAppResultsJson = az ad app list `
+    --display-name $ClientApplicationDisplayName `
+    --query "[].{id:id,appId:appId,displayName:displayName}" `
+    --output json
+
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to search for the React SPA Client App Registration."
+}
+
+$clientAppResults = @($clientAppResultsJson | ConvertFrom-Json)
+
+if ($clientAppResults.Count -gt 1) {
+    throw "Multiple App Registrations were found with the display name '$ClientApplicationDisplayName'."
+}
+
+if ($clientAppResults.Count -eq 0) {
+    Write-Host "Creating React SPA Client App Registration..."
+
+    $clientAppJson = az ad app create `
+        --display-name $ClientApplicationDisplayName `
+        --sign-in-audience AzureADMyOrg `
+        --output json
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to create the React SPA Client App Registration."
+    }
+
+    $clientApp = $clientAppJson | ConvertFrom-Json
+}
+else {
+    $clientApp = $clientAppResults[0]
+
+    Write-Host "React SPA Client App Registration already exists."
+}
+
+$clientAppId = $clientApp.appId
+$clientAppObjectId = $clientApp.id
+
+if (-not $clientAppId) {
+    throw "The React SPA Client application ID could not be determined."
+}
+
+if (-not $clientAppObjectId) {
+    throw "The React SPA Client object ID could not be determined."
+}
+
+#
+# React SPA Client settings
+#
+
+Write-Host ""
+Write-Host "Updating React SPA Client settings..."
+
+$requestBody = @{
+    spa = @{
+        redirectUris = $clientRedirectUris
+    }
+    requiredResourceAccess = @(
+        @{
+            resourceAppId  = $apiAppId
+            resourceAccess = @(
+                @{
+                    id   = $accessAsUserScopeId
+                    type = "Scope"
+                }
+            )
+        }
+    )
+} | ConvertTo-Json -Depth 10 -Compress
+
+$tempFile = [System.IO.Path]::GetTempFileName()
+
+try {
+    $requestBody | Set-Content `
+        -Path $tempFile `
+        -Encoding utf8 `
+        -NoNewline
+
+    az rest `
+        --method PATCH `
+        --url "https://graph.microsoft.com/v1.0/applications/$clientAppObjectId" `
+        --headers "Content-Type=application/json" `
+        --body "@$tempFile" `
+        --output none
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to update the React SPA Client settings."
+    }
+}
+finally {
+    Remove-Item $tempFile -ErrorAction SilentlyContinue
+}
+
+#
 # Backend API Service Principal
 #
 
@@ -520,3 +627,13 @@ Write-Host "Service Principal ID     : $($apiServicePrincipal.id)"
 Write-Host "Application ID URI       : $apiIdentifierUri"
 Write-Host "access_as_user Scope ID  : $accessAsUserScopeId"
 Write-Host "Fortune.Admin Role ID    : $fortuneAdminRoleId"
+
+Write-Host ""
+Write-Host "React SPA Client"
+Write-Host "----------------"
+Write-Host "Application Name         : $ClientApplicationDisplayName"
+Write-Host "Application Client ID    : $clientAppId"
+Write-Host "Application Object ID    : $clientAppObjectId"
+Write-Host "Production Redirect URI  : https://$StaticWebAppHostname"
+Write-Host "Local Redirect URI       : http://localhost:5173"
+Write-Host "Requested API Scope      : $apiIdentifierUri/access_as_user"
