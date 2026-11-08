@@ -6,10 +6,12 @@ type Fortune = {
 }
 type FortuneManagementProps = {
     apiBaseUrl: string
+    getAccessToken: () => Promise<string | undefined>
 }
 
 function FortuneManagement({
-                               apiBaseUrl
+                               apiBaseUrl,
+                               getAccessToken,
                            }: FortuneManagementProps) {
     const [fortunes, setFortunes] = useState<Fortune[]>([])
     const [message, setMessage] = useState('')
@@ -17,7 +19,15 @@ function FortuneManagement({
     const loadFortunes = async () => {
         try {
             setError('')
-            const response = await fetch(`${apiBaseUrl}/api/admin/fortunes`)
+            const accessToken = await getAccessToken()
+            if (!accessToken) {
+                return
+            }
+            const response = await fetch(`${apiBaseUrl}/api/admin/fortunes`, {
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`
+                },
+            })
             if (!response.ok) {
                 throw new Error(`Failed to load fortunes: ${response.status}`)
             }
@@ -35,9 +45,17 @@ function FortuneManagement({
         }
         try {
             setError('')
+            const accessToken = await getAccessToken()
+            if (!accessToken) {
+                return
+            }
+
             const response = await fetch(`${apiBaseUrl}/api/admin/fortunes`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`
+                },
                 body: JSON.stringify({message: normalizedMessage})
             })
             if (!response.ok) {
@@ -54,8 +72,16 @@ function FortuneManagement({
     const deleteFortune = async (id: number) => {
         try {
             setError('')
+            const accessToken = await getAccessToken()
+            if (!accessToken) {
+                return
+            }
+
             const response = await fetch(`${apiBaseUrl}/api/admin/fortunes/${id}`, {
-                method: 'DELETE'
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`
+                },
             })
             if (!response.ok) {
                 throw new Error(`Failed to delete fortune: ${response.status}`)

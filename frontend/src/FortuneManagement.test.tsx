@@ -44,10 +44,13 @@ describe('FortuneManagement', () => {
         vi.stubGlobal('fetch', fetchMock)
 
         const user = userEvent.setup()
+        const getAccessToken = vi.fn()
+            .mockResolvedValue('test-access-token')
 
         render(
             <FortuneManagement
                 apiBaseUrl="http://localhost:8080"
+                getAccessToken={getAccessToken}
             />
         )
 
@@ -109,10 +112,12 @@ describe('FortuneManagement', () => {
 
         vi.spyOn(console, 'error')
             .mockImplementation(() => undefined)
-
+        const getAccessToken = vi.fn()
+            .mockResolvedValue('test-access-token')
         render(
             <FortuneManagement
                 apiBaseUrl="http://localhost:8080"
+                getAccessToken={getAccessToken}
             />
         )
 
