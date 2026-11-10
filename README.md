@@ -85,15 +85,21 @@ docs/step05-entra-id-authentication-authorization.md
 ### Planned
 
 - [ ] Step 6: CI/CD
-- [ ] Step 7: Identity lifecycle management
-- [ ] Step 8: Replace Static Web Apps with a Buildpacks-based frontend container as an alternative architecture
+- [ ] Step 7: Spring Boot Diagnostics with AI-assisted local diagnostics using Spring Boot Actuator, BootUI, and BootUI MCP
+- [ ] Step 8: Observability with OpenTelemetry and Apache SkyWalking for tracing across HTTP, Spring Boot, and Azure SQL
+- [ ] Step 9: Identity lifecycle management
+- [ ] Step 10: Replace Static Web Apps with a Buildpacks-based frontend container as an alternative architecture
+- [ ] Step 11: AI / RAG with Azure OpenAI, RAG, and OpenTelemetry tracing for AI processing
 
 Future roadmap documents will use the following naming pattern:
 
 ```text
 docs/step06-cicd.md
-docs/step07-identity-lifecycle.md
-docs/step08-frontend-container.md
+docs/step07-spring-boot-diagnostics.md
+docs/step08-observability.md
+docs/step09-identity-lifecycle.md
+docs/step10-frontend-container.md
+docs/step11-ai-rag.md
 ```
 
 ---
@@ -681,8 +687,11 @@ Future roadmap documents will follow the same naming convention:
 
 ```text
 docs/step06-cicd.md
-docs/step07-identity-lifecycle.md
-docs/step08-frontend-container.md
+docs/step07-spring-boot-diagnostics.md
+docs/step08-observability.md
+docs/step09-identity-lifecycle.md
+docs/step10-frontend-container.md
+docs/step11-ai-rag.md
 ```
 
 ### Reference Documentation
@@ -831,12 +840,11 @@ The goal is to automate:
 
 Later roadmap work includes:
 
-- Identity lifecycle management
-- User invitation and onboarding
-- Self-service sign-up
-- Access reviews
-- Buildpacks-based frontend containerization
-- An alternative architecture that replaces Azure Static Web Apps with Azure Container Apps
+- Step 7: Spring Boot Diagnostics with Spring Boot Actuator, BootUI, and BootUI MCP for AI-assisted local diagnostics
+- Step 8: Observability with OpenTelemetry and Apache SkyWalking for tracing across HTTP, Spring Boot, and Azure SQL
+- Step 9: Identity lifecycle management, including user invitation and onboarding, self-service sign-up, and access reviews
+- Step 10: Buildpacks-based frontend containerization as an alternative architecture that replaces Azure Static Web Apps with Azure Container Apps
+- Step 11: AI / RAG with Azure OpenAI, RAG, and OpenTelemetry tracing for AI processing
 
 ---
 

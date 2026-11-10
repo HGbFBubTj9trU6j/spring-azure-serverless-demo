@@ -85,15 +85,21 @@ docs/step05-entra-id-authentication-authorization.md
 ### 計画中
 
 - [ ] Step 6: CI/CD
-- [ ] Step 7: ID ライフサイクル管理
-- [ ] Step 8: 代替アーキテクチャとして、Static Web Apps を Buildpacks ベースのフロントエンドコンテナーに置き換える
+- [ ] Step 7: Spring Boot Diagnostics（Spring Boot Actuator、BootUI、BootUI MCP を使用した AI 支援によるローカル診断）
+- [ ] Step 8: Observability（OpenTelemetry と Apache SkyWalking による HTTP、Spring Boot、Azure SQL を横断するトレーシング）
+- [ ] Step 9: ID ライフサイクル管理
+- [ ] Step 10: 代替アーキテクチャとして、Static Web Apps を Buildpacks ベースのフロントエンドコンテナーに置き換える
+- [ ] Step 11: AI / RAG（Azure OpenAI、RAG、AI 処理の OpenTelemetry トレーシング）
 
 今後のロードマップドキュメントでは、以下の命名パターンを使用します。
 
 ```text
 docs/step06-cicd.md
-docs/step07-identity-lifecycle.md
-docs/step08-frontend-container.md
+docs/step07-spring-boot-diagnostics.md
+docs/step08-observability.md
+docs/step09-identity-lifecycle.md
+docs/step10-frontend-container.md
+docs/step11-ai-rag.md
 ```
 
 ---
@@ -681,8 +687,11 @@ docs/step05-entra-id-authentication-authorization.md
 
 ```text
 docs/step06-cicd.md
-docs/step07-identity-lifecycle.md
-docs/step08-frontend-container.md
+docs/step07-spring-boot-diagnostics.md
+docs/step08-observability.md
+docs/step09-identity-lifecycle.md
+docs/step10-frontend-container.md
+docs/step11-ai-rag.md
 ```
 
 ### リファレンスドキュメント
@@ -831,12 +840,11 @@ docs/troubleshooting.md
 
 以降のロードマップには、以下が含まれます。
 
-- ID ライフサイクル管理
-- ユーザーの招待とオンボーディング
-- セルフサービスサインアップ
-- アクセスレビュー
-- Buildpacks ベースのフロントエンドコンテナー化
-- Azure Static Web Apps を Azure Container Apps に置き換える代替アーキテクチャ
+- Step 7: Spring Boot Diagnostics（Spring Boot Actuator、BootUI、BootUI MCP を使用した AI 支援によるローカル診断）
+- Step 8: Observability（OpenTelemetry と Apache SkyWalking による HTTP、Spring Boot、Azure SQL を横断するトレーシング）
+- Step 9: ユーザーの招待とオンボーディング、セルフサービスサインアップ、アクセスレビューを含む ID ライフサイクル管理
+- Step 10: Azure Static Web Apps を Azure Container Apps に置き換える代替アーキテクチャとしての Buildpacks ベースのフロントエンドコンテナー化
+- Step 11: AI / RAG（Azure OpenAI、RAG、AI 処理の OpenTelemetry トレーシング）
 
 ---
 
