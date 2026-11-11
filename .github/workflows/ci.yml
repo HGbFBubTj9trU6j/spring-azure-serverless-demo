@@ -12,6 +12,9 @@ jobs:
     name: Backend
     runs-on: ubuntu-latest
 
+    env:
+      ENTRA_TENANT_ID: ${{ secrets.ENTRA_TENANT_ID }}
+
     defaults:
       run:
         working-directory: backend
