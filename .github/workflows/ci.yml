@@ -34,6 +34,14 @@ jobs:
       - name: Run backend tests
         run: ./mvnw clean test
 
+      - name: Build backend OCI image
+        run: |
+          ./mvnw spring-boot:build-image \
+            -Dspring-boot.build-image.imageName=spring-azure-serverless-demo/backend:${{ github.sha }} \
+            -Dbuild.version=${{ github.sha }} \
+            -Dspring-boot.build-image.builder=paketobuildpacks/builder-noble-java-tiny:0.0.197 \
+            -Dspring-boot.build-image.imagePlatform=linux/amd64
+
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
