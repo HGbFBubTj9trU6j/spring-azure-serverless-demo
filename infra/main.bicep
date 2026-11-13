@@ -15,6 +15,13 @@ param containerAppsEnvironmentName string
 @description('Managed Identity name')
 param identityName string
 
+// GitHub Actions
+@description('GitHub Actions managed identity name')
+param githubActionsIdentityName string
+
+@description('GitHub Actions OIDC subject')
+param githubActionsSubject string
+
 @description('Static Web App name')
 param staticWebAppName string
 
@@ -82,6 +89,17 @@ module containerAppIdentity 'modules/container-app-identity.bicep' = {
   dependsOn: [
     containerRegistry
   ]
+}
+
+// GitHub Actions
+module githubActionsIdentity 'modules/github-actions-identity.bicep' = {
+  name: 'github-actions-identity'
+  scope: rg
+  params: {
+    location: location
+    identityName: githubActionsIdentityName
+    githubSubject: githubActionsSubject
+  }
 }
 
 module staticWebApp './modules/static-web-app.bicep' = {

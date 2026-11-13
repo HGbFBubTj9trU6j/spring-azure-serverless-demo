@@ -10,6 +10,11 @@ param containerAppsEnvironmentName = 'spring-azure-serverless-demo-dev-cae'
 
 param identityName = 'spring-azure-serverless-demo-dev-id'
 
+// GitHub Actions
+param githubActionsIdentityName = 'spring-azure-serverless-demo-dev-github-id'
+
+param githubActionsSubject = readEnvironmentVariable('GITHUB_ACTIONS_SUBJECT')
+
 param staticWebAppName = 'spring-azure-serverless-demo-dev-swa'
 
 param staticWebAppLocation = 'eastasia'
