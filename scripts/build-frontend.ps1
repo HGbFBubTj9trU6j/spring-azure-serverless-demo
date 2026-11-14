@@ -1,6 +1,7 @@
 # build-frontend.ps1
 param(
-    [string]$Environment = "dev"
+    [string]$Environment = "dev",
+    [string]$BuildVersion
 )
 
 $ErrorActionPreference = "Stop"
@@ -35,18 +36,22 @@ $fqdn = az containerapp show `
 
 $env:VITE_API_BASE_URL = "https://$fqdn"
 
-$commit = (git rev-parse --short HEAD).Trim()
-
-$dirty = git status --porcelain
-
-if ($dirty) {
-    $buildVersion = "$commit-dirty"
+if ($BuildVersion) {
+    $buildVersionValue = $BuildVersion
 }
 else {
-    $buildVersion = $commit
+    $commit = (git rev-parse --short HEAD).Trim()
+    $dirty = git status --porcelain
+
+    if ($dirty) {
+        $buildVersionValue = "$commit-dirty"
+    }
+    else {
+        $buildVersionValue = $commit
+    }
 }
 
-$env:VITE_BUILD_VERSION = $buildVersion
+$env:VITE_BUILD_VERSION = $buildVersionValue
 
 Push-Location frontend
 

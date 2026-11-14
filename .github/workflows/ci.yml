@@ -91,6 +91,10 @@ jobs:
     name: Frontend
     runs-on: ubuntu-latest
 
+    permissions:
+      id-token: write
+      contents: read
+
     defaults:
       run:
         working-directory: frontend
@@ -113,5 +117,32 @@ jobs:
         run: npm test -- --run
 
       - name: Build frontend
+        if: github.event_name == 'pull_request'
         run: npm run build
 
+      - name: Azure login with OIDC
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build frontend for production
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        working-directory: .
+        env:
+          ENTRA_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        run: |
+          ./scripts/build-frontend.ps1 `
+            -BuildVersion "${{ github.sha }}"
+
+      - name: Deploy frontend to Azure Static Web Apps
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        working-directory: .
+        env:
+          SWA_DEPLOYMENT_TOKEN: ${{ secrets.SWA_DEPLOYMENT_TOKEN }}
+        run: |
+          ./scripts/deploy-frontend.ps1
