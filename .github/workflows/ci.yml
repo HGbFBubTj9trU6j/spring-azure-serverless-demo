@@ -76,9 +76,8 @@ jobs:
         shell: pwsh
         working-directory: .
         run: |
-          ./scripts/deploy-backend.ps1 `
-            -ImageTag "${{ github.sha }}" `
-            -SkipPush
+          ./scripts/deploy-backend-image.ps1 `
+            -ImageTag "${{ github.sha }}"
 
       - name: Verify backend deployment
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
