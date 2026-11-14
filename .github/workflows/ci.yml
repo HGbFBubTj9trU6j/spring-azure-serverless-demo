@@ -71,6 +71,23 @@ jobs:
           docker push \
             springazureserverlessdemodevacr.azurecr.io/backend:${{ github.sha }}
 
+      - name: Deploy backend to Azure Container Apps
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        working-directory: .
+        run: |
+          ./scripts/deploy-backend.ps1 `
+            -ImageTag "${{ github.sha }}" `
+            -SkipPush
+
+      - name: Verify backend deployment
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        working-directory: .
+        run: |
+          ./scripts/verify-backend-deployment.ps1 `
+            -ImageTag "${{ github.sha }}"
+
   frontend:
     name: Frontend
     runs-on: ubuntu-latest

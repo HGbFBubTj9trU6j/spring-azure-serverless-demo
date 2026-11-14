@@ -1,5 +1,7 @@
 param(
-    [string]$Environment = "dev"
+    [string]$Environment = "dev",
+    [string]$ImageTag,
+    [switch]$SkipPush
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,13 +18,18 @@ $sqlServerName = $config.SqlServerName
 $sqlDatabaseName = $config.SqlDatabaseName
 $acrLoginServer = "$acrName.azurecr.io"
 
-$dirty = git status --porcelain
-
-if ($dirty) {
-    $tag = "$(git rev-parse --short HEAD)-dirty"
+if ($ImageTag) {
+    $tag = $ImageTag
 }
 else {
-    $tag = git rev-parse --short HEAD
+    $dirty = git status --porcelain
+
+    if ($dirty) {
+        $tag = "$(git rev-parse --short HEAD)-dirty"
+    }
+    else {
+        $tag = git rev-parse --short HEAD
+    }
 }
 
 $image = "$acrLoginServer/backend:$tag"
@@ -34,21 +41,26 @@ Write-Host "========================================"
 Write-Host "Image: $image"
 Write-Host ""
 
-Write-Host "Logging in to ACR..."
+if (-not $SkipPush) {
+    Write-Host "Logging in to ACR..."
 
-az acr login `
-    --name $AcrName
+    az acr login `
+        --name $AcrName
 
-if ($LASTEXITCODE -ne 0) {
-    throw "ACR login failed."
+    if ($LASTEXITCODE -ne 0) {
+        throw "ACR login failed."
+    }
+
+    Write-Host "Pushing image..."
+
+    docker push $image
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Docker push failed."
+    }
 }
-
-Write-Host "Pushing image..."
-
-docker push $image
-
-if ($LASTEXITCODE -ne 0) {
-    throw "Docker push failed."
+else {
+    Write-Host "Skipping ACR login and image push."
 }
 
 $environmentId = az containerapp env show `
