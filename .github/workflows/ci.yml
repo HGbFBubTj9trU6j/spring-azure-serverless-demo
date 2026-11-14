@@ -134,6 +134,9 @@ jobs:
         working-directory: .
         env:
           ENTRA_TENANT_ID: ${{ secrets.ENTRA_TENANT_ID }}
+          VITE_ENTRA_TENANT_ID: ${{ secrets.VITE_ENTRA_TENANT_ID }}
+          VITE_ENTRA_CLIENT_ID: ${{ secrets.VITE_ENTRA_CLIENT_ID }}
+          VITE_API_SCOPE: ${{ secrets.VITE_API_SCOPE }}
         run: |
           ./scripts/build-frontend.ps1 `
             -BuildVersion "${{ github.sha }}"
