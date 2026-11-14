@@ -12,6 +12,10 @@ jobs:
     name: Backend
     runs-on: ubuntu-latest
 
+    permissions:
+      id-token: write
+      contents: read
+
     env:
       ENTRA_TENANT_ID: test-tenant-id
 
@@ -42,6 +46,31 @@ jobs:
             -Dspring-boot.build-image.builder=paketobuildpacks/builder-noble-java-tiny:0.0.197 \
             -Dspring-boot.build-image.imagePlatform=linux/amd64
 
+      - name: Azure login with OIDC
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Login to Azure Container Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: az acr login --name springazureserverlessdemodevacr
+
+      - name: Tag backend OCI image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          docker tag \
+            spring-azure-serverless-demo/backend:${{ github.sha }} \
+            springazureserverlessdemodevacr.azurecr.io/backend:${{ github.sha }}
+
+      - name: Push backend OCI image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          docker push \
+            springazureserverlessdemodevacr.azurecr.io/backend:${{ github.sha }}
+
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
@@ -70,19 +99,3 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-  azure-auth:
-    name: Azure OIDC Authentication
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - name: Azure login with OIDC
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          allow-no-subscriptions: true
