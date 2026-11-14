@@ -133,7 +133,7 @@ jobs:
         shell: pwsh
         working-directory: .
         env:
-          ENTRA_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ENTRA_TENANT_ID: ${{ secrets.ENTRA_TENANT_ID }}
         run: |
           ./scripts/build-frontend.ps1 `
             -BuildVersion "${{ github.sha }}"
