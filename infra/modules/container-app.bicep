@@ -9,6 +9,7 @@ param identityId string
 param identityClientId string
 param sqlServerName string
 param sqlDatabaseName string
+param entraTenantId string
 
 resource app 'Microsoft.App/containerApps@2026-07-01' = {
   name: containerAppName
@@ -55,6 +56,10 @@ resource app 'Microsoft.App/containerApps@2026-07-01' = {
             {
                 name: 'SPRING_DATASOURCE_URL'
                 value: 'jdbc:sqlserver://${sqlServerName}.database.windows.net:1433;database=${sqlDatabaseName};encrypt=true;trustServerCertificate=false;authentication=ActiveDirectoryManagedIdentity;msiClientId=${identityClientId}'
+            }
+            {
+                name: 'ENTRA_TENANT_ID'
+                value: entraTenantId
             }
           ]
 

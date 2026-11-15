@@ -10,22 +10,10 @@ $config = Import-PowerShellDataFile ".\config\$Environment.psd1"
 $resourceGroup = $config.ResourceGroup
 $containerApp = $config.ContainerAppName
 
-if (-not $env:ENTRA_TENANT_ID) {
-    throw "ENTRA_TENANT_ID environment variable is not set."
-}
-
-$template = Get-Content `
+Copy-Item `
   "scripts/staticwebapp.config.template.json" `
-  -Raw
-
-$config = $template.Replace(
-  "__OPENID_ISSUER__",
-  "https://login.microsoftonline.com/$($env:ENTRA_TENANT_ID)/v2.0"
-)
-
-Set-Content `
   "frontend/public/staticwebapp.config.json" `
-  $config
+  -Force
 
 $fqdn = az containerapp show `
   --name $containerApp `
