@@ -6,6 +6,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+if (-not $env:ENTRA_TENANT_ID) {
+    throw "ENTRA_TENANT_ID environment variable is not set."
+}
+
+$entraTenantId = $env:ENTRA_TENANT_ID
+
 $config = Import-PowerShellDataFile ".\config\$Environment.psd1"
 
 $location = $config.Location
@@ -96,7 +102,8 @@ az deployment group create `
         identityId=$identityId `
         identityClientId=$identityClientId `
         sqlServerName=$sqlServerName `
-        sqlDatabaseName=$sqlDatabaseName
+        sqlDatabaseName=$sqlDatabaseName `
+        entraTenantId=$entraTenantId
 
 if ($LASTEXITCODE -ne 0) {
     throw "Container App deployment failed."
