@@ -149,3 +149,12 @@ jobs:
           SWA_DEPLOYMENT_TOKEN: ${{ secrets.SWA_DEPLOYMENT_TOKEN }}
         run: |
           ./scripts/deploy-frontend.ps1
+
+      - name: Verify frontend deployment
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        working-directory: .
+        run: |
+          ./scripts/verify-frontend-deployment.ps1 `
+            -ExpectedVersion "${{ github.sha }}" `
+            -FrontendBaseUrl "https://kind-sky-0814fa600.6.azurestaticapps.net"
