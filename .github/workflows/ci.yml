@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -47,7 +48,6 @@ jobs:
             -Dspring-boot.build-image.imagePlatform=linux/amd64
 
       - name: Azure login with OIDC
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -55,24 +55,20 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Login to Azure Container Registry
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: az acr login --name springazureserverlessdemodevacr
 
       - name: Tag backend OCI image
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           docker tag \
             spring-azure-serverless-demo/backend:${{ github.sha }} \
             springazureserverlessdemodevacr.azurecr.io/backend:${{ github.sha }}
 
       - name: Push backend OCI image
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           docker push \
             springazureserverlessdemodevacr.azurecr.io/backend:${{ github.sha }}
 
       - name: Deploy backend to Azure Container Apps
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: pwsh
         working-directory: .
         run: |
@@ -80,7 +76,6 @@ jobs:
             -ImageTag "${{ github.sha }}"
 
       - name: Verify backend deployment
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: pwsh
         working-directory: .
         run: |
@@ -116,12 +111,7 @@ jobs:
       - name: Run frontend tests
         run: npm test -- --run
 
-      - name: Build frontend
-        if: github.event_name == 'pull_request'
-        run: npm run build
-
       - name: Azure login with OIDC
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -129,7 +119,6 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Build frontend for production
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: pwsh
         working-directory: .
         env:
@@ -142,7 +131,6 @@ jobs:
             -BuildVersion "${{ github.sha }}"
 
       - name: Deploy frontend to Azure Static Web Apps
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: pwsh
         working-directory: .
         env:
@@ -151,7 +139,6 @@ jobs:
           ./scripts/deploy-frontend.ps1
 
       - name: Verify frontend deployment
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: pwsh
         working-directory: .
         run: |
