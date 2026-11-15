@@ -29,9 +29,8 @@ Application data is stored in Azure SQL Database. The deployed backend accesses 
 
 The application currently supports:
 
-- Microsoft Entra ID authentication through Azure Static Web Apps
-- React authentication and backend API access-token acquisition with MSAL
-- Authenticated access to the React frontend
+- React authentication with Microsoft Entra ID through MSAL
+- Backend API access-token acquisition with MSAL
 - Backend API authentication with Microsoft Entra ID access tokens
 - Spring Security JWT validation
 - Delegated API access through the `access_as_user` scope
@@ -49,6 +48,9 @@ The application currently supports:
 - Azure infrastructure deployment with Bicep
 - Backend OCI image creation with Cloud Native Buildpacks
 - Script-based build, deployment, and verification
+- CI/CD with GitHub Actions
+- GitHub OIDC-based Azure authentication
+- Automated backend and frontend deployment verification
 
 ---
 
@@ -69,6 +71,12 @@ The application currently supports:
   - [x] Spring Security JWT authentication
   - [x] `Fortune.Admin` app-role authorization
   - [x] Role-based Fortune Management UI
+- [x] Step 6: CI/CD
+  - [x] Backend and frontend automated tests
+  - [x] Backend OCI image build and ACR push
+  - [x] Azure Container Apps deployment
+  - [x] Azure Static Web Apps deployment
+  - [x] Backend and frontend deployment verification
 
 Step 4 implementation details are documented in:
 
@@ -82,9 +90,15 @@ Step 5 implementation details are documented in:
 docs/step05-entra-id-authentication-authorization.md
 ```
 
+Step 6 implementation details are documented in:
+
+```text
+docs/step06-cicd.md
+docs/step06-cicd-ja.md
+```
+
 ### Planned
 
-- [ ] Step 6: CI/CD
 - [ ] Step 7: Spring Boot Diagnostics with AI-assisted local diagnostics using Spring Boot Actuator, BootUI, and BootUI MCP
 - [ ] Step 8: Observability with OpenTelemetry and Apache SkyWalking for tracing across HTTP, Spring Boot, and Azure SQL
 - [ ] Step 9: Identity lifecycle management
@@ -94,7 +108,6 @@ docs/step05-entra-id-authentication-authorization.md
 Future roadmap documents will use the following naming pattern:
 
 ```text
-docs/step06-cicd.md
 docs/step07-spring-boot-diagnostics.md
 docs/step08-observability.md
 docs/step09-identity-lifecycle.md
@@ -112,35 +125,40 @@ Browser
   ▼
 Azure Static Web Apps
   │
-  ├── React + Vite
-  │     │
-  │     ├── SWA sign-in: spring-azure-serverless-demo-auth
-  │     │
-  │     └── MSAL client: spring-azure-serverless-demo-client
-  │             │
-  │             │ access_as_user
-  │             │ Backend API access token
-  │             ▼
-  │       spring-azure-serverless-demo-api
-  │             │
-  │             │ Authorization: Bearer <access-token>
-  │             ▼
-  └────────── HTTPS / CORS ──────────► Azure Container Apps
-                                        │
-                                        └── Spring Boot REST API
-                                              │
-                                              ├── Spring Security
-                                              │     ├── JWT validation
-                                              │     └── Fortune.Admin authorization
-                                              │
-                                              │ User Assigned Managed Identity
-                                              ▼
-                                        Azure SQL Database
-                                              │
-                                              └── dbo.fortunes
+  └── React + Vite
+          │
+          └── MSAL client: spring-azure-serverless-demo-client
+                  │
+                  │ access_as_user
+                  │ Backend API access token
+                  ▼
+            spring-azure-serverless-demo-api
+                  │
+                  │ Authorization: Bearer <access-token>
+                  ▼
+          HTTPS / CORS
+                  │
+                  ▼
+          Azure Container Apps
+                  │
+                  └── Spring Boot REST API
+                        │
+                        ├── Spring Security
+                        │     ├── JWT validation
+                        │     └── Fortune.Admin authorization
+                        │
+                        │ User Assigned Managed Identity
+                        ▼
+                  Azure SQL Database
+                        │
+                        └── dbo.fortunes
 ```
 
-Azure Static Web Apps provides the authenticated frontend entry point. React also uses MSAL to acquire an access token whose audience is the backend API.
+Azure Static Web Apps hosts the React frontend as a static web application.
+
+React uses MSAL for Microsoft Entra ID sign-in and for acquiring an access token whose audience is the backend API.
+
+Using the same MSAL-based authentication flow in both local and Azure environments reduces environment-specific behavior and simplifies verification.
 
 Azure Container Apps hosts the Spring Boot backend. Spring Security independently validates bearer JWT access tokens before protected API requests reach the application.
 
@@ -249,7 +267,7 @@ ENTRA_TENANT_ID
 SWA_DEPLOYMENT_TOKEN
 ```
 
-`ENTRA_TENANT_ID` is used when generating the Azure Static Web Apps authentication configuration.
+`ENTRA_TENANT_ID` is supplied to the Azure Container Apps backend and is used by Spring Security to configure the Microsoft Entra JWT issuer for backend API access-token validation.
 
 `SWA_DEPLOYMENT_TOKEN` is used when deploying the generated frontend to Azure Static Web Apps.
 
@@ -311,9 +329,6 @@ Build the React frontend
 Deploy the frontend to Azure Static Web Apps
         │
         ▼
-Configure Azure Static Web Apps authentication
-        │
-        ▼
 Verify sign-in, access-token API calls, and role-based authorization
 ```
 
@@ -328,15 +343,10 @@ scripts/build-backend.ps1
 scripts/deploy-backend.ps1
 scripts/build-frontend.ps1
 scripts/deploy-frontend.ps1
+scripts/verify-backend-deployment.ps1
+scripts/verify-frontend-deployment.ps1
 ```
 
-Azure Static Web Apps authentication setup uses:
-
-```text
-scripts/41-deploy-identity.ps1
-scripts/42-create-client-secret.ps1
-scripts/43-configure-swa-auth.ps1
-```
 
 The backend API app registration must also expose the `access_as_user` delegated scope and define the `Fortune.Admin` app role. The React client app registration must be granted delegated access to `access_as_user`. See the Step 5 document for the current configuration and verification procedure.
 
@@ -447,18 +457,21 @@ docs/step05-entra-id-authentication-authorization.md
 
 The application uses Microsoft Entra ID for authentication.
 
-Azure Static Web Apps remains the authenticated frontend entry point, while the React application also uses MSAL to sign users in and acquire an access token for the Spring Boot backend API.
+The React application uses MSAL as the application user authentication mechanism in both local and Azure environments.
+
+Azure Static Web Apps provides static frontend hosting and does not add a separate application authentication layer.
+
+After sign-in, MSAL acquires an access token for the Spring Boot backend API.
 
 The authentication resources belong to an authentication tenant that can have a lifecycle independent from the Azure subscription resources.
 
 ### App registrations
 
-The identity architecture separates responsibilities across three app registrations:
+The current identity architecture separates responsibilities across two app registrations:
 
-- `spring-azure-serverless-demo-auth`
-  - Provides Azure Static Web Apps authentication.
 - `spring-azure-serverless-demo-client`
   - Represents the React/MSAL public client.
+  - Signs users in with Microsoft Entra ID.
   - Requests the backend API's `access_as_user` delegated permission.
 - `spring-azure-serverless-demo-api`
   - Represents the Spring Boot resource server.
@@ -493,13 +506,6 @@ A non-administrative user's token can contain `access_as_user` without `Fortune.
 The Spring Boot application operates as an OAuth 2.0 Resource Server. Spring Security independently validates bearer JWT access tokens and establishes the authenticated principal before endpoint authorization is evaluated.
 
 The JWT authority conversion includes the access token's `roles` values so the backend can enforce the `Fortune.Admin` app role. An invalid, expired, missing, incorrectly issued, or wrong-audience access token must not be treated as an authenticated API call.
-
-For the existing Azure Static Web Apps authentication architecture and provisioning procedure, see:
-
-```text
-docs/authentication.md
-docs/authentication-setup.md
-```
 
 For the backend API token flow and Step 5 implementation, see:
 
@@ -619,6 +625,27 @@ npm run build  succeeded
 
 The production build emitted a non-blocking bundle-size warning for a chunk larger than 500 kB. The warning is separate from the authentication and authorization behavior.
 
+### Deployment Verification
+
+CI/CD deployment verification confirms that the artifacts built from the current Git commit are the artifacts actually deployed.
+
+Backend verification compares the Git commit SHA with the OCI image tag deployed to Azure Container Apps.
+
+Frontend verification compares the Git commit SHA with the version published through:
+
+```text
+/version.json
+```
+
+These checks are automated by GitHub Actions and are distinct from application E2E scenario verification.
+
+Step 6 CI/CD and deployment verification details are documented in:
+
+```text
+docs/step06-cicd.md
+docs/step06-cicd-ja.md
+```
+
 ### Local Feature Verification
 
 Local feature verification confirms frontend and backend behavior during development.
@@ -681,12 +708,13 @@ Currently available:
 ```text
 docs/step04-data-access.md
 docs/step05-entra-id-authentication-authorization.md
+docs/step06-cicd.md
+docs/step06-cicd-ja.md
 ```
 
 Future roadmap documents will follow the same naming convention:
 
 ```text
-docs/step06-cicd.md
 docs/step07-spring-boot-diagnostics.md
 docs/step08-observability.md
 docs/step09-identity-lifecycle.md
@@ -726,6 +754,13 @@ Microsoft Entra ID, React/MSAL, backend access tokens, Spring Security JWT authe
 docs/step05-entra-id-authentication-authorization.md
 ```
 
+GitHub Actions CI/CD and deployment verification:
+
+```text
+docs/step06-cicd.md
+docs/step06-cicd-ja.md
+```
+
 Known issues, diagnostics, and resolutions:
 
 ```text
@@ -738,9 +773,11 @@ docs/troubleshooting.md
 
 Authentication and authorization are enforced at multiple layers.
 
-Azure Static Web Apps provides the authenticated frontend entry point.
+Azure Static Web Apps hosts the React frontend.
 
-The React application uses MSAL to acquire a backend API access token containing the `access_as_user` delegated scope. API requests send the token in the `Authorization: Bearer` header.
+Application user authentication is performed by React/MSAL with Microsoft Entra ID.
+
+The React application acquires a backend API access token containing the `access_as_user` delegated scope. API requests send the token in the `Authorization: Bearer` header.
 
 The Spring Boot backend independently validates bearer JWT access tokens through Spring Security.
 
@@ -767,7 +804,6 @@ Do not commit:
 - Access tokens
 - Refresh tokens
 - ID tokens
-- Real `/.auth/me` responses
 - Real user identities
 - Azure credentials
 - SQL credentials
@@ -777,7 +813,6 @@ Do not commit:
 
 Suitable secret-storage locations include:
 
-- Azure Static Web Apps application settings
 - GitHub Actions secrets
 - Azure Key Vault
 - Local user environment variables
@@ -785,7 +820,6 @@ Suitable secret-storage locations include:
 For authentication-specific security boundaries, see:
 
 ```text
-docs/authentication.md
 docs/step05-entra-id-authentication-authorization.md
 ```
 
@@ -823,24 +857,12 @@ Topics include:
 
 ## Next Steps
 
-### Step 6: CI/CD
+### Step 7: Spring Boot Diagnostics
 
-The next step introduces CI/CD automation.
-
-The goal is to automate:
-
-- Backend testing, including authentication and authorization tests
-- Frontend testing, including Access Token-based role visibility tests
-- Backend OCI image creation
-- Infrastructure deployment
-- Database deployment verification
-- Backend deployment
-- Frontend build and deployment
-- Deployment verification
+The next step introduces local diagnostic capabilities using Spring Boot Actuator, BootUI, and BootUI MCP, including AI-assisted investigation with MCP clients.
 
 Later roadmap work includes:
 
-- Step 7: Spring Boot Diagnostics with Spring Boot Actuator, BootUI, and BootUI MCP for AI-assisted local diagnostics
 - Step 8: Observability with OpenTelemetry and Apache SkyWalking for tracing across HTTP, Spring Boot, and Azure SQL
 - Step 9: Identity lifecycle management, including user invitation and onboarding, self-service sign-up, and access reviews
 - Step 10: Buildpacks-based frontend containerization as an alternative architecture that replaces Azure Static Web Apps with Azure Container Apps

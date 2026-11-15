@@ -1,14 +1,17 @@
 # Authentication Setup
 
-This document describes how to reproduce and verify the current Microsoft Entra ID authentication configuration for spring-azure-serverless-demo.
+This document describes how to reproduce and verify the current Microsoft Entra ID authentication and authorization configuration for `spring-azure-serverless-demo`.
 
-The application uses Azure Static Web Apps as the authenticated frontend entry point.
+The current implementation uses:
 
-For the current authentication architecture, trust boundaries, and limitations, see:
-
-```text
-docs/authentication.md
-```
+- React and MSAL for interactive user sign-in.
+- A single-tenant SPA App Registration for the frontend.
+- A separate App Registration for the backend API.
+- OAuth 2.0 access tokens for frontend-to-backend calls.
+- Spring Security as the backend resource server.
+- The `access_as_user` delegated scope for API access.
+- The `Fortune.Admin` app role for administrative operations.
+- Azure Static Web Apps for static frontend hosting only.
 
 For the overall deployment sequence, see:
 
@@ -16,11 +19,18 @@ For the overall deployment sequence, see:
 docs/deployment.md
 ```
 
+For architecture and trust-boundary details, see:
+
+```text
+docs/authentication.md
+docs/architecture.md
+```
+
 ---
 
 ## Overview
 
-Authentication configuration spans two Microsoft Entra ID tenant contexts.
+Authentication resources and application resources may exist in different Microsoft Entra ID tenant contexts.
 
 ```text
 Azure Subscription Tenant
@@ -33,16 +43,42 @@ Azure Subscription Tenant
 
 Authentication Tenant
   │
-  ├── App Registration
-  ├── Service Principal
-  └── Registered users
+  ├── spring-azure-serverless-demo-client
+  │     ├── SPA platform configuration
+  │     ├── Production and local redirect URIs
+  │     └── access_as_user delegated permission
+  │
+  └── spring-azure-serverless-demo-api
+        ├── Application ID URI
+        ├── access_as_user delegated scope
+        ├── Fortune.Admin app role
+        └── Service Principal
 ```
 
-The authentication tenant contains the Microsoft Entra ID identity resources.
+The application authentication flow is:
 
-The Azure subscription tenant contains the deployed application resources and Azure Static Web Apps application settings.
+```text
+Browser
+  │
+  ▼
+Azure Static Web Apps
+  │  serves the React application
+  ▼
+React / MSAL
+  │  authorization code flow with PKCE
+  ▼
+Microsoft Entra ID
+  │  issues an access token for the API
+  ▼
+Spring Boot / Spring Security
+  │  validates the token, scope, and role
+  ▼
+Protected Fortune API operations
+```
 
-The setup process therefore requires switching the active Azure CLI context between the two tenants.
+Azure Static Web Apps does not perform user authentication in this architecture. It hosts the compiled frontend and its static configuration.
+
+The React SPA is a public client. It must not use or store a confidential client credential.
 
 ---
 
@@ -54,63 +90,61 @@ The setup sequence is:
 Verify prerequisites
         │
         ▼
-Obtain Azure Static Web Apps hostname
+Select the Azure subscription and obtain the Static Web Apps hostname
         │
         ▼
 Switch to the authentication tenant
         │
         ▼
-Create or update the App Registration
+Run 41-deploy-identity.ps1
+        │
+        ├── Create or update the backend API App Registration
+        ├── Configure access_as_user
+        ├── Configure Fortune.Admin
+        ├── Create or verify the API Service Principal
+        ├── Create or update the React SPA App Registration
+        ├── Configure production and local SPA redirect URIs
+        └── Configure the client-to-API delegated permission
         │
         ▼
-Create or verify the Service Principal
+Verify the two App Registrations
         │
         ▼
-Configure redirect URI and ID tokens
-        │
-        ▼
-Create or reuse a Client Secret
-        │
-        ▼
-Switch back to the Azure subscription tenant
-        │
-        ▼
-Configure Azure Static Web Apps application settings
+Deploy the backend with the authentication tenant configuration
         │
         ▼
 Build and deploy the frontend
         │
         ▼
-Verify authentication scenarios
+Verify sign-in, API access, authorization, and sign-out
 ```
 
-The project scripts automate the identity deployment, Client Secret creation, and Azure Static Web Apps configuration steps.
+The identity deployment is intentionally idempotent. The script reuses matching App Registrations when possible and converges their configuration to the expected state.
 
 ---
 
 ## Prerequisites
 
-The following prerequisites must be satisfied before configuring authentication:
+Before configuring authentication, confirm that:
 
 - Azure Static Web Apps has been deployed.
-- The Azure Static Web Apps production hostname is available.
+- Its production hostname is available.
 - The user can access the Azure subscription tenant.
-- The user can manage applications in the authentication tenant.
-- Azure CLI is installed.
+- The user can manage applications, Service Principals, scopes, permissions, and app roles in the authentication tenant.
+- Azure CLI is installed and authenticated.
 - PowerShell is available.
-- The project scripts are available locally.
-- `ENTRA_TENANT_ID` is configured before building the frontend.
-- The frontend can be deployed to Azure Static Web Apps.
+- The repository scripts are available locally.
+- The backend and frontend can be built and deployed.
+- The target users exist in, or have been invited to, the authentication tenant as required.
+- A tenant administrator can grant consent or assign app roles when the tenant policy requires it.
 
-The application infrastructure should normally be deployed before authentication is configured.
-
-This is necessary because the Azure Static Web Apps hostname is used to construct the Microsoft Entra ID redirect URI.
+The Azure infrastructure should normally be deployed before the identity script is run because the production Static Web Apps hostname is used as an SPA redirect URI.
 
 ---
 
 ## Required Information
 
-The authentication setup uses the following values.
+The setup uses the following values:
 
 ```text
 Authentication Tenant ID
@@ -118,9 +152,16 @@ Azure Subscription Tenant ID
 Azure Subscription ID
 Azure Static Web Apps name
 Azure Static Web Apps Resource Group
-Azure Static Web Apps hostname
-Application Client ID
-Client Secret
+Azure Static Web Apps production hostname
+Backend API App Registration name
+React SPA App Registration name
+```
+
+The default App Registration names are:
+
+```text
+spring-azure-serverless-demo-api
+spring-azure-serverless-demo-client
 ```
 
 Environment-specific non-secret Azure resource names are loaded from:
@@ -129,19 +170,23 @@ Environment-specific non-secret Azure resource names are loaded from:
 config/dev.psd1
 ```
 
-Secret values must not be written to this configuration file.
+Do not place credentials, tokens, or other secret values in the environment configuration file.
 
 ---
 
-## Required Environment Variable
+## Required Environment Variables
 
-The frontend authentication configuration requires:
+### ENTRA_TENANT_ID
+
+The backend deployment requires:
 
 ```text
 ENTRA_TENANT_ID
 ```
 
-Verify that it is available without displaying its value:
+This value identifies the Microsoft Entra ID tenant whose tokens the backend accepts. It is not a secret.
+
+Verify that it is available without printing the value:
 
 ```powershell
 if ($env:ENTRA_TENANT_ID) {
@@ -152,7 +197,7 @@ else {
 }
 ```
 
-If necessary, set it for the current PowerShell session:
+Set it for the current PowerShell session when necessary:
 
 ```powershell
 $env:ENTRA_TENANT_ID = "<AUTHENTICATION_TENANT_ID>"
@@ -170,13 +215,21 @@ To store it as a Windows user environment variable:
 
 Open a new PowerShell session after setting a Windows user environment variable.
 
-`ENTRA_TENANT_ID` is not a secret, but environment-specific identifiers should still be handled carefully in public documentation and example output.
+### SWA_DEPLOYMENT_TOKEN
+
+Frontend deployment requires:
+
+```text
+SWA_DEPLOYMENT_TOKEN
+```
+
+This is a deployment credential, not a user-authentication credential. Handle it as a secret and do not commit it.
 
 ---
 
 ## Step 1: Verify the Azure Subscription Context
 
-Sign in to the tenant that contains the Azure subscription resources.
+Sign in to the tenant that contains the Azure subscription resources:
 
 ```powershell
 az login `
@@ -201,14 +254,14 @@ az account show `
 Confirm that:
 
 - The active tenant is the Azure subscription tenant.
-- The selected subscription contains the deployed Azure Static Web App.
+- The selected subscription contains the deployed Static Web App.
 - The expected Resource Group is available.
 
 ---
 
 ## Step 2: Obtain the Azure Static Web Apps Hostname
 
-Retrieve the production hostname.
+Retrieve the production hostname:
 
 ```powershell
 $swaHostname = az staticwebapp show `
@@ -218,33 +271,35 @@ $swaHostname = az staticwebapp show `
   --output tsv
 ```
 
-Display the hostname:
+Verify the result:
 
 ```powershell
-Write-Host $swaHostname
+if (-not $swaHostname) {
+    throw "The Azure Static Web Apps hostname could not be determined."
+}
+
+Write-Host "Static Web Apps hostname: $swaHostname"
 ```
 
-The result should be a hostname without the URI scheme.
-
-Example form:
+The value must be a hostname without the URI scheme, for example:
 
 ```text
 <STATIC_WEB_APP_HOSTNAME>
 ```
 
-The authentication callback URI is constructed from this hostname.
+The corresponding production SPA redirect URI is:
 
 ```text
-https://<STATIC_WEB_APP_HOSTNAME>/.auth/login/aad/callback
+https://<STATIC_WEB_APP_HOSTNAME>
 ```
 
-Use the actual Azure Static Web Apps name and Resource Group from the selected environment configuration when they differ from the development example.
+Use the actual Static Web Apps name and Resource Group from the selected environment when they differ from the development example.
 
 ---
 
 ## Step 3: Switch to the Authentication Tenant
 
-Sign in to the authentication tenant.
+Sign in to the authentication tenant:
 
 ```powershell
 az login `
@@ -260,180 +315,178 @@ az account show `
   --output tsv
 ```
 
-The result must match the authentication tenant before running the identity deployment scripts.
+The result must match the authentication tenant before running the identity deployment script.
 
-The authentication tenant may not contain the target Azure subscription. The `--allow-no-subscriptions` option supports signing in when only directory-level identity operations are required.
+The authentication tenant may not contain the target Azure subscription. The `--allow-no-subscriptions` option supports directory-level identity operations in that case.
 
 ---
 
-## Step 4: Create or Update the Authentication Identity
+## Step 4: Create or Update the Identity Configuration
 
-Run the identity deployment script from the repository root.
+Run the identity deployment script from the repository root:
 
 ```powershell
 .\scripts\41-deploy-identity.ps1 `
   -StaticWebAppHostname $swaHostname
 ```
 
-The script creates or updates the authentication identity configuration.
-
-It manages:
-
-- App Registration
-- Service Principal
-- Azure Static Web Apps redirect URI
-- ID-token configuration
-
-The redirect URI uses:
+By default, the script manages:
 
 ```text
-https://<STATIC_WEB_APP_HOSTNAME>/.auth/login/aad/callback
+spring-azure-serverless-demo-api
+spring-azure-serverless-demo-client
 ```
 
-The script reuses the existing App Registration when possible.
+The backend API registration contains:
 
-This allows the authentication identity to remain stable when the Azure application environment is updated or rebuilt.
+- An Application ID URI.
+- The `access_as_user` delegated permission scope.
+- The `Fortune.Admin` app role.
+- A Service Principal in the authentication tenant.
 
-### Verify the App Registration
+The React SPA registration contains:
 
-Inspect the application information if required:
+- The `https://<STATIC_WEB_APP_HOSTNAME>` production redirect URI.
+- The `http://localhost:5173` local-development redirect URI.
+- Delegated permission to the API's `access_as_user` scope.
+
+The script output includes the tenant ID, application IDs, object IDs, scope ID, role ID, Service Principal ID, and redirect URIs. Treat those values as environment-specific configuration data. Do not copy real identifiers into committed documentation.
+
+### Optional Display-name Overrides
+
+If the repository script supports display-name parameters for another environment, use the parameter names defined by the script. Keep API and SPA registrations distinct and use unique names within the tenant.
+
+Do not create an additional registration for the Static Web Apps host. The current host is not an OAuth confidential client.
+
+---
+
+## Step 5: Verify the Backend API App Registration
+
+Retrieve the API application:
 
 ```powershell
-az ad app list `
-  --display-name <APPLICATION_DISPLAY_NAME> `
-  --query "[].{displayName:displayName,appId:appId,id:id}" `
-  --output table
+$apiApp = az ad app list `
+  --display-name "spring-azure-serverless-demo-api" `
+  --query "[0]" `
+  --output json | ConvertFrom-Json
+
+if (-not $apiApp) {
+    throw "The backend API App Registration was not found."
+}
 ```
 
-Do not copy real Client IDs or Object IDs into committed documentation.
+Verify its principal configuration without writing real values to a repository file:
 
-### Verify the Service Principal
+```powershell
+az ad app show `
+  --id $apiApp.id `
+  --query "{displayName:displayName,appId:appId,identifierUris:identifierUris,scopes:api.oauth2PermissionScopes[].{value:value,isEnabled:isEnabled},roles:appRoles[].{value:value,isEnabled:isEnabled}}" `
+  --output json
+```
 
-Inspect the Service Principal if required:
+Confirm that:
+
+- The Application ID URI exists.
+- The `access_as_user` scope exists and is enabled.
+- The `Fortune.Admin` app role exists and is enabled.
+- The role's allowed member types match the intended assignment model.
+
+### Verify the API Service Principal
 
 ```powershell
 az ad sp list `
-  --display-name <APPLICATION_DISPLAY_NAME> `
+  --filter "appId eq '$($apiApp.appId)'" `
   --query "[].{displayName:displayName,appId:appId,id:id}" `
   --output table
 ```
 
-### Verify the Redirect URI
+Exactly one expected Service Principal should be present.
 
-Inspect the App Registration web configuration if required:
+The Service Principal is the tenant-local representation used for permission consent and app-role assignment. Do not delete it while the API registration is in use.
+
+---
+
+## Step 6: Verify the React SPA App Registration
+
+Retrieve the client application:
+
+```powershell
+$clientApp = az ad app list `
+  --display-name "spring-azure-serverless-demo-client" `
+  --query "[0]" `
+  --output json | ConvertFrom-Json
+
+if (-not $clientApp) {
+    throw "The React SPA App Registration was not found."
+}
+```
+
+Inspect its SPA redirect URIs:
 
 ```powershell
 az ad app show `
-  --id <APPLICATION_OBJECT_ID> `
-  --query web.redirectUris `
+  --id $clientApp.id `
+  --query "spa.redirectUris" `
   --output json
 ```
 
-The expected redirect URI is:
+The expected values are:
 
 ```text
-https://<STATIC_WEB_APP_HOSTNAME>/.auth/login/aad/callback
+https://<STATIC_WEB_APP_HOSTNAME>
+http://localhost:5173
 ```
 
-### Verify ID-token Configuration
+Redirect URI comparison is exact. Check the scheme, hostname, port, path, and trailing slash.
 
-Inspect the implicit-grant settings if required:
+Inspect delegated API permissions:
 
 ```powershell
 az ad app show `
-  --id <APPLICATION_OBJECT_ID> `
-  --query web.implicitGrantSettings `
+  --id $clientApp.id `
+  --query "requiredResourceAccess" `
   --output json
 ```
 
-The authentication configuration must support the ID-token flow required by the current Azure Static Web Apps provider configuration.
+Confirm that the client requests the backend API's `access_as_user` scope. The permission entry must reference the backend API application and the scope ID produced by the identity script.
+
+### Consent
+
+Depending on tenant policy, a user or administrator may need to grant consent for the delegated permission.
+
+Consent does not replace authorization checks. The backend must still validate the token and require the expected scope and role for each protected operation.
 
 ---
 
-## Step 5: Create or Reuse a Client Secret
+## Step 7: Configure App-role Assignments
 
-Run:
+Assign `Fortune.Admin` only to users or groups that require administrative Fortune operations.
 
-```powershell
-.\scripts\42-create-client-secret.ps1
-```
+App-role assignment is an administrative tenant operation. Verify assignments in Microsoft Entra ID or with an approved administrative process.
 
-The script checks the existing application credentials.
+After changing an assignment:
 
-If a credential already exists, the script does not create another Client Secret by default.
+1. Sign out of the application.
+2. End the existing browser session when necessary.
+3. Sign in again to obtain a new token.
+4. Verify that the new token contains the expected role claim.
 
-This avoids creating unnecessary duplicate credentials.
+An old cached token does not gain a newly assigned role automatically.
 
-### Create an Additional Client Secret
-
-When a new Azure Static Web Apps environment needs a new credential, run:
-
-```powershell
-.\scripts\42-create-client-secret.ps1 `
-  -CreateNew
-```
-
-The existing credentials are preserved.
-
-Use the newly generated Client Secret only for the configuration operation that requires it.
-
-### Client Secret Visibility
-
-A Client Secret value is displayed only when the credential is created.
-
-The value cannot be retrieved later.
-
-If the value is lost, create a new Client Secret rather than attempting to retrieve the old value.
-
-### Client Secret Handling
-
-Do not:
-
-- Commit the Client Secret.
-- Write it into `config/dev.psd1`.
-- Store it in README files.
-- Store it in committed Markdown files.
-- Include it in screenshots.
-- Include it in shell history where avoidable.
-- Include it in Git commit messages.
-- Copy it into generated source files.
-
-Use the Client Secret immediately to configure Azure Static Web Apps.
+Do not grant `Fortune.Admin` merely to make authentication succeed. Authentication, delegated API access, and administrative authorization are separate controls.
 
 ---
 
-## Step 6: Store the Client ID and Client Secret Temporarily
+## Step 8: Return to the Azure Subscription Tenant
 
-Store the Application Client ID in the current PowerShell session.
-
-```powershell
-$clientId = "<APPLICATION_CLIENT_ID>"
-```
-
-Read the newly created Client Secret as a SecureString:
-
-```powershell
-$clientSecret = Read-Host `
-  "Enter the newly created Client Secret" `
-  -AsSecureString
-```
-
-Do not print the SecureString value.
-
-The SecureString remains in the current PowerShell session only for the following configuration step.
-
----
-
-## Step 7: Switch Back to the Azure Subscription Tenant
-
-Sign in to the Azure subscription tenant.
+Sign in to the Azure subscription tenant:
 
 ```powershell
 az login `
   --tenant <AZURE_SUBSCRIPTION_TENANT_ID>
 ```
 
-Select the target Azure subscription.
+Select the target subscription:
 
 ```powershell
 az account set `
@@ -448,76 +501,13 @@ az account show `
   --output table
 ```
 
-Do not continue until the active tenant and subscription identify the environment containing the target Azure Static Web App.
+Do not continue until the active tenant and subscription identify the target application environment.
 
 ---
 
-## Step 8: Configure Azure Static Web Apps Authentication
+## Step 9: Deploy the Backend Authentication Configuration
 
-Run:
-
-```powershell
-.\scripts\43-configure-swa-auth.ps1 `
-  -ClientId $clientId `
-  -ClientSecret $clientSecret
-```
-
-By default, the script loads the target Azure Static Web Apps name and Resource Group from:
-
-```text
-config/dev.psd1
-```
-
-To target another supported environment:
-
-```powershell
-.\scripts\43-configure-swa-auth.ps1 `
-  -Environment prod `
-  -ClientId $clientId `
-  -ClientSecret $clientSecret
-```
-
-The script verifies that:
-
-- The target Azure Static Web App exists in the active subscription.
-- The Application Client ID is configured.
-- The Client Secret application setting exists.
-
-The script must not display the Client Secret.
-
-The Client Secret must not be written to a repository file.
-
----
-
-## Step 9: Verify Azure Static Web Apps Application Settings
-
-List the Azure Static Web Apps application-setting names if required.
-
-Do not print secret values into shared output or committed documentation.
-
-Verify that the settings referenced by the generated authentication configuration exist.
-
-The generated configuration is based on:
-
-```text
-scripts/staticwebapp.config.template.json
-```
-
-The generated build artifact is written to:
-
-```text
-frontend/dist/staticwebapp.config.json
-```
-
-Do not manually edit the generated file.
-
-Modify the source template or build configuration and regenerate the frontend instead.
-
----
-
-## Step 10: Build the Frontend
-
-Before building, verify that `ENTRA_TENANT_ID` is configured.
+Verify `ENTRA_TENANT_ID` before backend deployment:
 
 ```powershell
 if (-not $env:ENTRA_TENANT_ID) {
@@ -525,20 +515,38 @@ if (-not $env:ENTRA_TENANT_ID) {
 }
 ```
 
-Build the frontend:
+Deploy the backend using the repository deployment procedure:
+
+```powershell
+.\scripts\deploy-backend.ps1
+```
+
+The backend deployment passes the authentication tenant configuration to the Azure Container App.
+
+After deployment, confirm that the backend starts successfully and that Spring Security is configured as an OAuth 2.0 resource server.
+
+The backend must validate at least:
+
+- Token signature.
+- Issuer and tenant.
+- Token audience for the backend API.
+- Token lifetime.
+- The `access_as_user` scope for delegated API access.
+- The `Fortune.Admin` role for administrative operations.
+
+Do not rely on the frontend to enforce backend authorization. Frontend controls improve usability but are not a security boundary.
+
+---
+
+## Step 10: Build the Frontend
+
+Build the frontend with the current environment configuration:
 
 ```powershell
 .\scripts\build-frontend.ps1
 ```
 
-The script:
-
-1. Loads the selected environment configuration.
-2. Retrieves the Azure Container App API endpoint.
-3. Sets `VITE_API_BASE_URL`.
-4. Calculates `VITE_BUILD_VERSION`.
-5. Generates the Azure Static Web Apps authentication configuration.
-6. Runs the Vite production build.
+The build script prepares the frontend API endpoint and build metadata, then runs the Vite production build.
 
 The generated files are written to:
 
@@ -548,17 +556,13 @@ frontend/dist
 
 Do not commit the generated `dist` directory.
 
+The Static Web Apps configuration must remain consistent with the hosting-only role of Azure Static Web Apps. It must not introduce a second user-authentication flow in front of MSAL.
+
 ---
 
 ## Step 11: Configure the Static Web Apps Deployment Token
 
-The frontend deployment requires:
-
-```text
-SWA_DEPLOYMENT_TOKEN
-```
-
-Retrieve the token while signed in to the Azure subscription tenant:
+Retrieve the deployment token while signed in to the Azure subscription tenant:
 
 ```powershell
 $token = az staticwebapp secrets list `
@@ -578,9 +582,7 @@ Store it as a Windows user environment variable:
 )
 ```
 
-Open a new PowerShell session.
-
-Verify that the variable is available without printing its value:
+Open a new PowerShell session and verify that the variable is available without printing its value:
 
 ```powershell
 if ($env:SWA_DEPLOYMENT_TOKEN) {
@@ -592,8 +594,6 @@ else {
 ```
 
 Do not store the deployment token in the repository.
-
-The deployment token is used for frontend deployment. It is separate from the Microsoft Entra ID Client Secret used by the authentication provider.
 
 ---
 
@@ -613,21 +613,7 @@ frontend/dist
 
 to the Azure Static Web Apps production environment.
 
-The deployment script invokes Azure Static Web Apps CLI through:
-
-```text
-npx @azure/static-web-apps-cli
-```
-
-A globally installed `swa` executable is not required by the normal deployment script.
-
-The production deployment explicitly uses:
-
-```text
---env production
-```
-
-This avoids unintentionally targeting another resolved environment.
+The deployment token authorizes deployment only. It is not used by MSAL and is not presented to the backend API.
 
 ---
 
@@ -650,11 +636,7 @@ default
 
 Verify that the production environment is ready before testing authentication.
 
----
-
-## Step 14: Verify the Authentication Flow
-
-Retrieve the application hostname:
+Retrieve and display the application URL:
 
 ```powershell
 $swaHostname = az staticwebapp show `
@@ -662,113 +644,104 @@ $swaHostname = az staticwebapp show `
   --resource-group spring-azure-serverless-demo-rg `
   --query defaultHostname `
   --output tsv
-```
 
-Display the application URL:
-
-```powershell
 Write-Host "https://$swaHostname"
 ```
 
-Open the displayed URL in a browser.
+---
 
-Verify the following flow:
+## Step 14: Verify Sign-in and Token Acquisition
 
-1. Access the deployed application without an authenticated session.
-2. Confirm that the configured authentication flow starts.
-3. Sign in through Microsoft Entra ID.
-4. Confirm that the user returns to the deployed React application.
-5. Confirm that the application is displayed.
-6. Confirm that the frontend build version is visible.
-7. Complete logout.
-8. Access the application again.
-9. Confirm that authentication is required again.
+Use a new InPrivate or Incognito browser window to avoid relying on an old session.
+
+1. Open the deployed React application.
+2. Confirm that the application loads before sign-in.
+3. Select **Sign in**.
+4. Confirm that MSAL redirects to the expected Microsoft Entra ID tenant.
+5. Sign in with a registered user.
+6. Confirm that the browser returns to the React application at the configured SPA redirect URI.
+7. Confirm that the signed-in state is displayed.
+8. Trigger a Fortune API request.
+9. Confirm that MSAL acquires an access token for the backend API scope.
+10. Confirm that the backend accepts the token.
+
+Do not paste a real access token into documentation, issue trackers, chat, screenshots, or test fixtures.
+
+When token inspection is required for diagnostics, verify only the necessary claims in an approved local tool and then discard the token.
+
+Expected claim categories include:
+
+- Issuer and tenant.
+- Audience.
+- Subject or object identifier.
+- Delegated scope.
+- App roles when assigned.
+- Issued-at and expiration times.
 
 ---
 
-## Step 15: Verify Authenticated Identity
+## Step 15: Verify Authorization Scenarios
 
-Open:
-
-```text
-https://<STATIC_WEB_APP_HOSTNAME>/.auth/me
-```
-
-Verify the expected identity information.
-
-The response can include:
-
-- Authentication provider
-- User identity information
-- Token audience
-- Token issuer
-- User roles
-
-Do not copy a real response into the repository.
-
-Do not commit:
-
-- Real user details
-- Tenant IDs
-- Client IDs
-- Object IDs
-- Access tokens
-- ID tokens
-- Claims containing personal information
-
-Use `/.auth/me` only for verification and diagnostics.
-
----
-
-## Step 16: Verify User Scenarios
-
-Verify the supported authentication scenarios.
-
-### Registered External User
+### User with Delegated API Access
 
 Expected result:
 
 ```text
-Access granted
+Read-only or ordinary protected operations succeed when access_as_user is present.
 ```
 
-Verify that a user from another tenant who is registered in the authentication tenant can sign in and access the application.
+Verify that the backend, not only the frontend, rejects a request that lacks the delegated scope.
 
-### Native Authentication-tenant User
+### User with Fortune.Admin
 
 Expected result:
 
 ```text
-Access granted
+Administrative Fortune operations succeed.
 ```
 
-Verify that a native user in the authentication tenant can sign in and access the application.
+Verify:
 
-### Unregistered User
+- Administrative UI controls are displayed appropriately.
+- Fortune list operations succeed.
+- Fortune creation succeeds.
+- Fortune deletion succeeds.
+- The backend independently enforces the role.
+
+### User without Fortune.Admin
 
 Expected result:
 
 ```text
-Access denied
+Ordinary permitted operations follow the application policy, but administrative operations are denied.
 ```
 
-Verify that a user who is not registered in the authentication tenant cannot access the application.
+Hiding an administrative button is not sufficient. Direct API calls without the role must also be denied.
 
-These scenarios verify that access is associated with registration in the authentication tenant rather than email-domain matching alone.
+### Unregistered or Disallowed User
+
+Expected result:
+
+```text
+Sign-in or API access is denied according to tenant and application policy.
+```
+
+Verify that access is based on tenant registration, consent, token validity, scope, and role rather than email-domain matching alone.
 
 ---
 
-## Step 17: Verify Logout
+## Step 16: Verify Sign-out
 
-Complete the logout flow from the deployed application.
+Complete sign-out from the React application.
 
-After logout:
+After sign-out:
 
-1. The authenticated application session should be ended.
-2. The application should no longer behave as an authenticated session.
-3. Accessing the protected application again should start the authentication flow.
+1. The application must clear its MSAL account and token state.
+2. Protected API calls must no longer succeed with the previous application session.
+3. A subsequent protected action must require authentication again.
+4. Signing in again must obtain fresh tokens.
 
-Logout verification is part of the authentication exit criteria.
+Browser single sign-on can allow Microsoft Entra ID to authenticate the same account again without prompting for credentials. That behavior does not mean the application sign-out failed.
 
 ---
 
@@ -776,188 +749,226 @@ Logout verification is part of the authentication exit criteria.
 
 The Azure subscription resources and authentication resources have independent lifecycles.
 
-When Azure resources are rebuilt:
+When the Azure environment is rebuilt:
 
-1. Deploy the new Azure Static Web App.
-2. Obtain the new Static Web Apps hostname.
+1. Deploy the new Static Web App.
+2. Obtain its production hostname.
 3. Switch to the authentication tenant.
 4. Run `41-deploy-identity.ps1` with the new hostname.
-5. Create an additional Client Secret if required.
-6. Switch back to the Azure subscription tenant.
-7. Configure the new Azure Static Web App.
-8. Build and deploy the frontend.
-9. Verify authentication.
+5. Verify the backend API and React SPA registrations.
+6. Verify or grant delegated permission consent.
+7. Verify app-role assignments.
+8. Return to the Azure subscription tenant.
+9. Deploy the backend with the correct `ENTRA_TENANT_ID`.
+10. Build and deploy the frontend.
+11. Repeat sign-in, API, authorization, and sign-out verification.
 
-The existing App Registration is reused when possible.
+The script reuses the existing App Registrations when possible.
 
-A new redirect URI can be added for the newly deployed Azure Static Web App.
-
-Do not remove an existing redirect URI until the corresponding environment no longer requires it.
-
----
-
-## Client Secret Lifecycle
-
-Client Secrets must be managed deliberately.
-
-### Existing Credential
-
-When an existing credential is sufficient, do not create a duplicate credential.
-
-### New Azure Static Web App
-
-A newly deployed Azure Static Web App may require a new Client Secret because an old secret value cannot be retrieved.
-
-Create an additional credential with:
-
-```powershell
-.\scripts\42-create-client-secret.ps1 `
-  -CreateNew
-```
-
-### Secret Rotation
-
-When rotating a secret:
-
-1. Create a new credential.
-2. Configure the target Azure Static Web App with the new value.
-3. Verify authentication.
-4. Retain the previous credential until the new configuration is confirmed.
-5. Remove obsolete credentials through an explicit administrative process.
-
-The current script does not automatically delete previous credentials.
-
-### Expired Credential
-
-If authentication fails because a credential expired:
-
-1. Create a new Client Secret.
-2. Update the Azure Static Web Apps application setting.
-3. Rebuild and redeploy only when the generated authentication configuration also changed.
-4. Verify authentication.
-5. Remove the obsolete credential when safe.
+When replacing an environment, do not remove an old SPA redirect URI until the corresponding frontend is no longer used. Confirm that no deployment, custom domain, or test environment still depends on it.
 
 ---
 
 ## Configuration Update Scenarios
 
-### Authentication Tenant ID Changed
+### Authentication Tenant Changed
 
 If the authentication tenant changes:
 
 1. Set the new `ENTRA_TENANT_ID`.
-2. Deploy or select the corresponding App Registration.
-3. Configure the Azure Static Web App with the new Client ID and Client Secret.
-4. Rebuild the frontend authentication configuration.
-5. Redeploy the frontend.
-6. Verify token issuer and audience through `/.auth/me`.
+2. Sign in to the new tenant with sufficient directory permissions.
+3. Create or select the two App Registrations in that tenant.
+4. Configure the API scope, app role, Service Principal, SPA redirect URIs, and delegated permission.
+5. Grant consent and assign roles in the new tenant.
+6. Redeploy the backend.
+7. Rebuild and redeploy the frontend when its MSAL configuration changes.
+8. Verify issuer, audience, scope, and role claims.
+9. Complete the full end-to-end test.
+
+Objects and consent do not automatically move between tenants.
 
 ### Static Web Apps Hostname Changed
 
-If the Azure Static Web Apps hostname changes:
+If the production hostname changes:
 
 1. Retrieve the new hostname.
-2. Update the App Registration through `41-deploy-identity.ps1`.
-3. Verify the new redirect URI.
-4. Build the frontend.
-5. Deploy the frontend.
-6. Verify login and callback behavior.
+2. Run `41-deploy-identity.ps1` with the new hostname.
+3. Verify the new SPA redirect URI.
+4. Rebuild and deploy the frontend.
+5. Verify login and redirect behavior.
+6. Remove the old redirect URI only after the old environment is retired.
 
-### Client Secret Changed
+### API Application Changed
 
-If only the Client Secret changes:
+If the backend API registration changes:
 
-1. Configure the Azure Static Web Apps application setting with the new value.
-2. Verify authentication.
+1. Verify the new Application ID URI.
+2. Verify the `access_as_user` scope and its identifier.
+3. Verify the `Fortune.Admin` role and its identifier.
+4. Update the React SPA delegated permission.
+5. Grant consent when required.
+6. Update backend and frontend configuration that depends on the API identifier.
+7. Redeploy both application components.
+8. Obtain new tokens and repeat authorization tests.
 
-A frontend rebuild is not necessarily required when only the secret application setting changes and the generated frontend configuration remains unchanged.
+### SPA Application Changed
+
+If the React SPA registration changes:
+
+1. Verify production and local redirect URIs.
+2. Verify the delegated permission to the backend API.
+3. Update the frontend MSAL client configuration.
+4. Rebuild and redeploy the frontend.
+5. Clear stale browser state and obtain a new token.
+6. Repeat the sign-in and API tests.
+
+### Fortune.Admin Assignment Changed
+
+If only an app-role assignment changes:
+
+1. Verify the assignment against the backend API Service Principal.
+2. Sign out.
+3. Discard cached tokens.
+4. Sign in again.
+5. Confirm that the new token has, or no longer has, the role.
+6. Verify both the UI and direct API behavior.
 
 ---
 
 ## Authentication Exit Criteria
 
-Authentication setup is complete when:
+Authentication and authorization setup is complete when:
 
-- The App Registration exists.
-- The Service Principal exists.
-- The expected redirect URI is configured.
-- ID-token configuration is enabled.
-- Azure Static Web Apps contains the required application settings.
-- A registered external user can sign in.
-- A native authentication-tenant user can sign in.
-- An unregistered user is denied access.
-- Post-login redirection succeeds.
-- Authenticated identity information is available through `/.auth/me`.
-- Logout succeeds.
-- No Client Secret or token value is committed to the repository.
+- The backend API App Registration exists.
+- Its Application ID URI is configured.
+- The `access_as_user` delegated scope exists and is enabled.
+- The `Fortune.Admin` app role exists and is enabled.
+- The backend API Service Principal exists.
+- The React SPA App Registration exists.
+- The production and local SPA redirect URIs are configured.
+- The SPA requests the API's delegated scope.
+- Required consent has been granted.
+- Required app-role assignments are present.
+- The backend validates access tokens as a resource server.
+- A permitted user can sign in through MSAL.
+- A token with `access_as_user` can call the protected API.
+- Requests without a valid token are rejected.
+- Requests without the required scope are rejected.
+- Administrative requests without `Fortune.Admin` are rejected.
+- Administrative requests with `Fortune.Admin` succeed.
+- Fortune list, create, and delete behavior matches the authorization policy.
+- Sign-out succeeds.
+- No token or deployment credential is committed to the repository.
 
 ---
 
 ## Current Security Boundary
 
-The current authentication flow protects the Azure Static Web Apps frontend.
-
-The Azure Container Apps backend does not yet independently validate the authenticated user's token.
-
-Therefore, successful frontend authentication does not currently provide backend-enforced API authorization.
-
-CORS restrictions do not replace API authentication.
-
-Backend API authentication and authorization are planned for a later roadmap step.
-
-For the current trust-boundary explanation, see:
+The current security boundary is the backend API.
 
 ```text
-docs/authentication.md
+React / MSAL
+  │
+  │ Bearer access token
+  ▼
+Spring Security Resource Server
+  ├── signature validation
+  ├── issuer and tenant validation
+  ├── audience validation
+  ├── access_as_user enforcement
+  └── Fortune.Admin enforcement
 ```
+
+Azure Static Web Apps provides frontend hosting. It does not replace backend token validation.
+
+Frontend route guards, disabled controls, and hidden buttons are user-experience features. They do not provide enforceable API authorization.
+
+CORS limits which browser origins can call the API, but it does not authenticate a caller and does not replace OAuth 2.0 token validation.
+
+Azure SQL access through managed identity is separate from end-user authentication. The backend's database identity does not represent the signed-in user.
 
 ---
 
 ## Troubleshooting
 
-### Login Redirect Fails
+### MSAL Redirect Fails
 
 Verify:
 
-- Static Web Apps hostname
-- Redirect URI
-- Authentication tenant
-- App Registration
-- Azure Static Web Apps application settings
-- Generated `staticwebapp.config.json`
+- The browser is using the expected frontend URL.
+- The SPA registration contains the exact frontend origin as a redirect URI.
+- The redirect URI is under the SPA platform configuration.
+- The active tenant is the intended authentication tenant.
+- The frontend uses the expected tenant and client application.
+- The redirect URI has no unexpected path or trailing slash.
 
-The redirect URI must exactly match:
+Expected production form:
 
 ```text
-https://<STATIC_WEB_APP_HOSTNAME>/.auth/login/aad/callback
+https://<STATIC_WEB_APP_HOSTNAME>
 ```
+
+Expected local form:
+
+```text
+http://localhost:5173
+```
+
+### Consent or Scope Error
+
+Verify:
+
+- The backend API exposes `access_as_user`.
+- The SPA's delegated permission references the correct API application.
+- The permission references the current scope ID.
+- User or administrator consent has been granted as required.
+- The requested scope string uses the backend API Application ID URI.
+- A fresh token was obtained after configuration changed.
 
 ### 401 Unauthorized
 
-Verify that:
+A 401 response normally means the request was not authenticated successfully.
 
-- The sign-in flow completed.
-- The user is registered in the authentication tenant.
-- The App Registration configuration is correct.
-- The Azure Static Web Apps settings reference the expected Client ID and secret setting.
-- The Client Secret is valid.
+Verify:
 
-### Existing Client Secret Cannot Be Retrieved
+- An access token is attached as a Bearer token.
+- The token is not expired.
+- The token signature is valid.
+- The issuer and tenant match `ENTRA_TENANT_ID`.
+- The audience identifies the backend API.
+- The backend is using the intended Entra configuration.
+- The deployed backend received the current environment settings.
 
-This is expected.
+Do not diagnose a 401 by weakening token validation.
 
-Create a new Client Secret:
+### 403 Forbidden
 
-```powershell
-.\scripts\42-create-client-secret.ps1 `
-  -CreateNew
-```
+A 403 response normally means the caller is authenticated but lacks required authorization.
 
-Use the new value immediately to configure the target Azure Static Web App.
+Verify:
+
+- The token contains `access_as_user` for delegated API access.
+- The administrative endpoint requires `Fortune.Admin` only where intended.
+- The user or group has the app-role assignment.
+- The role is emitted in a newly acquired token.
+- Spring Security maps the scope and role claims to the expected authorities.
+
+Do not change a protected endpoint to permit all callers merely to make a 403 disappear.
+
+### Fortune.Admin Is Missing After Assignment
+
+1. Verify the assignment against the backend API Service Principal.
+2. Sign out of the application.
+3. Close the private browser window or clear the MSAL cache.
+4. Sign in again.
+5. Inspect only the necessary token claims locally.
+6. Confirm that the backend recognizes the mapped authority.
+
+Role assignments affect newly issued tokens, not already cached tokens.
 
 ### Wrong Tenant Is Active
 
-Verify:
+Verify the Azure CLI context:
 
 ```powershell
 az account show `
@@ -967,35 +978,44 @@ az account show `
 
 Switch to the tenant required by the current step before rerunning the command.
 
-### Generated Authentication Configuration Is Incorrect
+### Duplicate App Registrations
+
+If the identity script reports more than one application with the same display name:
+
+1. Stop the setup.
+2. Identify the intended application by object ID and application ID.
+3. Determine which deployments and permissions reference each object.
+4. Rename or remove obsolete duplicates through an explicit administrative process.
+5. Rerun the script only after the display name is unambiguous.
+
+Do not delete an application solely because its name appears duplicated.
+
+### Frontend Works but API Calls Fail
+
+Verify the complete token path:
+
+```text
+React/MSAL configuration
+  → requested API scope
+  → issued token audience and scope
+  → Authorization header
+  → backend issuer and audience validation
+  → endpoint authorization rule
+```
+
+Successful interactive sign-in proves only that the SPA can authenticate a user. It does not prove that the SPA acquired a valid token for the backend API.
+
+### Static Frontend Does Not Load
+
+Treat this as a hosting or deployment problem before changing identity configuration.
 
 Verify:
 
-```text
-ENTRA_TENANT_ID
-```
-
-Then rebuild the frontend:
-
-```powershell
-.\scripts\build-frontend.ps1
-```
-
-Do not manually modify:
-
-```text
-frontend/dist/staticwebapp.config.json
-```
-
-### Authentication Works but Backend Is Not Protected
-
-This is the current expected architecture.
-
-Azure Static Web Apps authenticates access to the frontend.
-
-The backend does not yet independently validate the authenticated user.
-
-Backend API authentication and authorization are introduced in a later roadmap step.
+- The frontend build succeeded.
+- `frontend/dist` contains the expected assets.
+- The deployment targeted the production environment.
+- `SWA_DEPLOYMENT_TOKEN` is current.
+- Static Web Apps routing serves the React entry point.
 
 For additional diagnostics, see:
 
@@ -1009,32 +1029,41 @@ docs/troubleshooting.md
 
 Never commit:
 
-- Client Secrets
-- Azure Static Web Apps deployment tokens
-- Access tokens
-- Refresh tokens
-- ID tokens
-- Real `/.auth/me` responses
-- Real user information
-- Private certificates or keys
-- Generated frontend files containing environment-specific values
-- Local environment files containing credentials
+- Azure Static Web Apps deployment tokens.
+- Access tokens.
+- Refresh tokens.
+- ID tokens.
+- Real user claims or personal information.
+- Private certificates or keys.
+- Local environment files containing credentials.
+- Generated frontend files containing unintended environment-specific data.
 
-Do not include secret or identity values in:
+Do not include token or identity values in:
 
-- Git commit messages
-- Pull request descriptions
-- Screenshots
-- Test fixtures
-- Markdown examples
-- Command history where avoidable
+- Git commit messages.
+- Pull request descriptions.
+- Screenshots.
+- Test fixtures.
+- Markdown examples.
+- Shared terminal transcripts.
+- Command history where avoidable.
 
-Use appropriate secret-storage locations such as:
+The React SPA is a public client and must use authorization code flow with PKCE. Do not add a confidential credential to frontend code, Vite variables, static assets, or Static Web Apps settings.
 
-- Azure Static Web Apps application settings
-- GitHub Actions secrets
-- Azure Key Vault
-- Local user environment variables
+Store deployment and automation credentials only in approved locations, such as:
+
+- GitHub Actions secrets.
+- Azure Key Vault.
+- Local user environment variables for development-only workflows.
+- Managed identity when supported by the deployment process.
+
+Use least privilege for:
+
+- Directory application administration.
+- API consent.
+- App-role assignment.
+- Azure deployment access.
+- Database access.
 
 ---
 
@@ -1064,7 +1093,7 @@ Troubleshooting:
 docs/troubleshooting.md
 ```
 
-Step 3 implementation history:
+Authentication implementation history:
 
 ```text
 docs/step03-authentication.md

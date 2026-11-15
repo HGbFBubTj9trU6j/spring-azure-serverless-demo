@@ -123,7 +123,7 @@ Azure Static Web Apps
   │             ▼
   │       spring-azure-serverless-demo-api
   │             │
-  │             │ Authorization: ******
+  │             │ Authorization: Bearer <access-token>
   │             ▼
   └────────── HTTPS / CORS ──────────► Azure Container Apps
                                         │
@@ -470,7 +470,7 @@ ID アーキテクチャでは、3 つのアプリ登録に責務を分離して
 サインイン後、MSAL はバックエンド API 用のトークンを取得します。React は API リクエストで、そのトークンを Bearer トークンとして送信します。
 
 ```http
-Authorization: ******
+Authorization: Bearer <access-token>
 ```
 
 バックエンド API 用アクセストークンと React クライアントの ID トークンには、それぞれ異なる目的があります。API トークンは、バックエンド API のスコープとロールの参照元です。ユーザーが API の `Fortune.Admin` ロールを持つかどうかを判断するために、UI で `account.idTokenClaims.roles` を使用してはいけません。
