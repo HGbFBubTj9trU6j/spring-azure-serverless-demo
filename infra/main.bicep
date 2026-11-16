@@ -101,6 +101,18 @@ module githubActionsIdentity 'modules/github-actions-identity.bicep' = {
     githubSubject: githubActionsSubject
   }
 }
+module githubActionsAcrRole 'modules/github-actions-acr-role.bicep' = {
+  name: 'github-actions-acr-role'
+  scope: rg
+  params: {
+    containerRegistryName: containerRegistryName
+    githubActionsIdentityName: githubActionsIdentityName
+  }
+  dependsOn: [
+    containerRegistry
+    githubActionsIdentity
+  ]
+}
 
 module staticWebApp './modules/static-web-app.bicep' = {
   name: 'staticWebApp'
@@ -111,6 +123,20 @@ module staticWebApp './modules/static-web-app.bicep' = {
     staticWebAppName: staticWebAppName
     staticWebAppSku: staticWebAppSku
   }
+}
+
+// GitHub Actions role assignment for Static Web App
+module githubActionsStaticWebAppRole 'modules/github-actions-static-web-app-role.bicep' = {
+  name: 'github-actions-static-web-app-role'
+  scope: rg
+  params: {
+    staticWebAppName: staticWebAppName
+    githubActionsIdentityName: githubActionsIdentityName
+  }
+  dependsOn: [
+    githubActionsIdentity
+    staticWebApp
+  ]
 }
 
 // Azure SQL
