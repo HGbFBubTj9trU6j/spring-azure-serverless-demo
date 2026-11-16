@@ -8,7 +8,7 @@
     ContainerAppsEnvironmentName = "spring-azure-serverless-demo-dev-cae"
 
     IdentityName                 = "spring-azure-serverless-demo-dev-id"
-
+    GithubActionsIdentityName    = "spring-azure-serverless-demo-dev-github-id"
     ContainerAppName             = "spring-azure-serverless-dev-ca"
 
     StaticWebAppName             = "spring-azure-serverless-demo-dev-swa"
