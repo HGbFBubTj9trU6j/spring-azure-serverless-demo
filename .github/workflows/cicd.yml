@@ -54,19 +54,27 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Load deployment configuration
+        shell: pwsh
+        working-directory: .
+        run: |
+          $config = Import-PowerShellDataFile "./config/dev.psd1"
+          "ACR_NAME=$($config.AcrName)" >> $env:GITHUB_ENV
+          "ACR_LOGIN_SERVER=$($config.AcrName).azurecr.io" >> $env:GITHUB_ENV
+
       - name: Login to Azure Container Registry
-        run: az acr login --name springazureserverlessdemodevacr
+        run: az acr login --name ${{ env.ACR_NAME }}
 
       - name: Tag backend OCI image
         run: |
           docker tag \
             spring-azure-serverless-demo/backend:${{ github.sha }} \
-            springazureserverlessdemodevacr.azurecr.io/backend:${{ github.sha }}
+            ${{ env.ACR_LOGIN_SERVER }}/backend:${{ github.sha }}
 
       - name: Push backend OCI image
         run: |
           docker push \
-            springazureserverlessdemodevacr.azurecr.io/backend:${{ github.sha }}
+            ${{ env.ACR_LOGIN_SERVER }}/backend:${{ github.sha }}
 
       - name: Deploy backend to Azure Container Apps
         shell: pwsh
@@ -142,6 +150,20 @@ jobs:
         shell: pwsh
         working-directory: .
         run: |
+          $config = Import-PowerShellDataFile "./config/dev.psd1"
+
+          $frontendHostName = az staticwebapp show `
+            --name $config.StaticWebAppName `
+            --resource-group $config.ResourceGroup `
+            --query "defaultHostname" `
+            --output tsv
+
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($frontendHostName)) {
+              throw "Failed to get Static Web App hostname."
+          }
+
+          $frontendBaseUrl = "https://$frontendHostName"
+
           ./scripts/verify-frontend-deployment.ps1 `
             -ExpectedVersion "${{ github.sha }}" `
-            -FrontendBaseUrl "https://kind-sky-0814fa600.6.azurestaticapps.net"
+            -FrontendBaseUrl $frontendBaseUrl
