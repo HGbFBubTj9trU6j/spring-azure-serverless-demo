@@ -1,6 +1,6 @@
 # Authentication
 
-This document describes the current authentication architecture, trust boundaries, verified user scenarios, and known limitations of the spring-azure-serverless-demo application.
+This document describes the current user authentication and application authorization architecture of the spring-azure-serverless-demo application.
 
 Authentication setup and reproduction procedures are documented separately in:
 
@@ -14,32 +14,52 @@ Deployment procedures are documented in:
 docs/deployment.md
 ```
 
+Step 5 implementation details are documented in:
+
+```text
+docs/step05-entra-id-authentication-authorization.md
+```
+
 ---
 
 ## Overview
 
-The application uses Microsoft Entra ID authentication through Azure Static Web Apps.
+The application uses Microsoft Entra ID for user authentication.
 
-Azure Static Web Apps is currently the authenticated entry point for the React application.
+The React SPA performs sign-in and access-token acquisition with MSAL. Azure Static Web Apps hosts the generated frontend, but it is not the authentication boundary for the application.
+
+The current user-to-API flow is:
 
 ```text
 User
   │
   ▼
+React + MSAL
+  │
+  ▼
 Microsoft Entra ID
   │
-  ▼
-Azure Static Web Apps
+  ├─ ID token / authenticated SPA session
   │
-  ▼
-React application
+  └─ Backend API access token
+            │
+            ▼
+Azure Container Apps
+            │
+            ▼
+Spring Security OAuth 2.0 Resource Server
+            │
+            ├─ JWT validation
+            ├─ access_as_user
+            └─ Fortune.Admin
 ```
 
-The current implementation authenticates users before allowing access to the deployed frontend.
+Authentication and authorization are deliberately separated:
 
-The Spring Boot backend running on Azure Container Apps does not yet independently validate the authenticated user's token.
-
-Backend API authentication and authorization are planned for a later roadmap step.
+- Authentication establishes who the signed-in user is.
+- The delegated `access_as_user` scope represents access to the backend API on behalf of the signed-in user.
+- The `Fortune.Admin` app role protects administrative Fortune operations.
+- UI visibility is aligned with the user's role, but backend authorization remains the security boundary.
 
 ---
 
@@ -53,243 +73,222 @@ Browser
   ▼
 Azure Static Web Apps
   │
-  ├── Microsoft Entra ID authentication
-  │
-  └── React + Vite frontend
-  │
-  │ HTTPS / CORS
-  ▼
+  └─ React + Vite frontend
+          │
+          ▼
+        MSAL
+          │
+          ▼
+   Microsoft Entra ID
+          │
+          ▼
+   Backend API access token
+          │ HTTPS / CORS
+          ▼
 Azure Container Apps
-  │
-  └── Spring Boot REST API
+          │
+          ▼
+Spring Boot REST API
+          │
+          ▼
+Spring Security JWT validation
 ```
 
-Azure Static Web Apps is responsible for:
+Azure Static Web Apps is responsible for static frontend hosting and deployment. React/MSAL is responsible for the interactive user authentication flow and access-token acquisition.
 
-- Starting the sign-in flow
-- Redirecting the user to Microsoft Entra ID
-- Processing the authentication callback
-- Providing the authenticated frontend entry point
-- Exposing authenticated user information through `/.auth/me`
-- Providing the logout endpoint
-
-The React application relies on the authentication state established by Azure Static Web Apps.
+Spring Boot independently authenticates protected API requests by validating Microsoft Entra ID access tokens.
 
 ---
 
-## Tenant Boundary
+## Microsoft Entra ID Application Registrations
 
-The application separates the Azure subscription resources from the authentication resources.
+The current design uses two application registrations.
 
-```text
-Azure Subscription Tenant
-  │
-  ├── Azure Static Web Apps
-  ├── Azure Container Apps
-  ├── Azure Container Registry
-  ├── Azure SQL Database
-  └── User Assigned Managed Identity
+### Backend API Application
 
-Authentication Tenant
-  │
-  ├── App Registration
-  ├── Service Principal
-  └── Registered users
-```
+The backend API application registration represents the Spring Boot API.
 
-The Azure subscription tenant contains the deployed application infrastructure.
+It:
 
-The authentication tenant contains the Microsoft Entra ID resources used to authenticate users of Azure Static Web Apps.
+- Exposes the delegated `access_as_user` scope.
+- Defines the `Fortune.Admin` app role.
+- Provides the audience expected by the Spring Security Resource Server.
 
-This separation allows the Azure environment and the authentication environment to have independent lifecycles.
+### React SPA Application
 
-For example, the Azure resources can be rebuilt in another subscription while the existing App Registration is reused where appropriate.
+The React application registration represents the browser-based SPA.
 
----
+It:
 
-## Authentication Components
+- Uses the Authorization Code Flow with PKCE through MSAL.
+- Contains SPA redirect URIs for supported local and deployed frontend origins.
+- Is granted delegated permission to the backend API's `access_as_user` scope.
 
-The current authentication configuration uses the following components.
-
-### Azure Static Web Apps
-
-Azure Static Web Apps provides:
-
-- Frontend hosting
-- Authentication integration
-- Authentication callback handling
-- Authenticated user information
-- Logout handling
-
-### Microsoft Entra ID App Registration
-
-The App Registration identifies the application to Microsoft Entra ID.
-
-Its configuration includes:
-
-- Application Client ID
-- Redirect URI
-- ID-token configuration
-- Client credential used by Azure Static Web Apps
-
-### Service Principal
-
-The Service Principal represents the application within the authentication tenant.
-
-The identity deployment script creates or reuses the Service Principal associated with the App Registration.
-
-### Client Secret
-
-Azure Static Web Apps uses a Client Secret associated with the App Registration.
-
-The Client Secret is configured as an Azure Static Web Apps application setting.
-
-The secret value must not be committed to the repository or written to generated source files.
+No client secret is required by the React SPA authentication flow.
 
 ---
 
 ## Authentication Flow
 
-The current sign-in flow is:
+The sign-in flow is:
 
 ```text
 Unauthenticated user
   │
   ▼
-Azure Static Web Apps
+React application
+  │
+  ▼
+MSAL
   │
   ▼
 Microsoft Entra ID authorization endpoint
   │
   ▼
-Authentication Tenant
-  │
-  ▼
 User authentication
   │
   ▼
-Azure Static Web Apps callback
+Authorization Code Flow with PKCE
   │
   ▼
 Authenticated React application
 ```
 
-The expected callback URI follows this form:
+After sign-in, MSAL can acquire an access token for the backend API by requesting the configured API scope.
+
+The same MSAL-based model is used for local development and the Azure-hosted frontend, reducing environment-specific authentication behavior.
+
+---
+
+## Backend API Authentication
+
+Protected requests include a bearer access token:
 
 ```text
-https://<STATIC_WEB_APP_HOSTNAME>/.auth/login/aad/callback
+Authorization: Bearer <access-token>
 ```
 
-The callback URI belongs to Azure Static Web Apps rather than directly to the React application.
+The Spring Boot backend is configured as an OAuth 2.0 Resource Server.
 
----
+Spring Security validates the JWT before protected requests reach application logic. Validation includes the Microsoft Entra ID issuer configuration and the token audience expected by the backend API.
 
-## Authentication Entry Point
+`ENTRA_TENANT_ID` is supplied to the deployed backend so that the application can construct the Microsoft Entra issuer configuration.
 
-The deployed Azure Static Web Apps application is the authenticated user entry point.
-
-Unauthenticated access starts the configured Microsoft Entra ID authentication flow.
-
-After successful authentication, the user is redirected back to the deployed application.
-
-The frontend can then retrieve the authentication information exposed by Azure Static Web Apps.
-
----
-
-## User Registration Boundary
-
-Access is determined by whether the user can authenticate through the configured authentication tenant.
-
-The validation performed for this project confirms that access is associated with registration in the authentication tenant rather than the user's email domain alone.
-
-The following user types were verified:
-
-- External user registered in the authentication tenant
-- Native user in the authentication tenant
-- User not registered in the authentication tenant
-
----
-
-## Verified Authentication Scenarios
-
-| User type | Registered in authentication tenant | Expected result | Verified |
-| --- | ---: | --- | ---: |
-| External tenant user | Yes | Access granted | Yes |
-| Native authentication tenant user | Yes | Access granted | Yes |
-| Unregistered user | No | Access denied | Yes |
-
-The verified behavior demonstrates that both native and external users can access the application when they are registered in the authentication tenant.
-
-A user who is not registered in the authentication tenant is denied access.
-
----
-
-## Identity Verification
-
-After successful authentication, authenticated user information can be inspected through:
+An unauthenticated request to a protected backend API is therefore expected to receive:
 
 ```text
-https://<STATIC_WEB_APP_HOSTNAME>/.auth/me
+401 Unauthorized
 ```
 
-The endpoint was used to verify:
-
-- Authenticated user information
-- Authentication provider
-- Token audience
-- Token issuer
-- User roles
-- Successful identity handling by Azure Static Web Apps
-
-Real user details, tenant IDs, client IDs, object IDs, and token values must not be included in committed documentation.
-
-The `/.auth/me` endpoint is used for verification and diagnostics.
-
-The repository must not contain copied production responses from this endpoint.
+This is intentional and confirms that backend authentication is enforced independently of frontend hosting.
 
 ---
 
-## Logout
+## Delegated API Access
 
-Azure Static Web Apps provides the logout path used by the application.
-
-A successful logout verification confirms that:
-
-- The authenticated application session is ended.
-- The user leaves the authenticated application flow.
-- Accessing the protected application again starts the configured authentication flow.
-
-Logout verification is part of the Step 3 exit criteria.
-
----
-
-## Authentication and Application Authorization
-
-Authentication answers:
+The backend API exposes:
 
 ```text
-Who is the user?
+access_as_user
 ```
 
-Authorization answers:
+The React SPA requests an access token containing this delegated permission and sends that token when calling protected backend APIs.
 
-```text
-What is the user allowed to do?
-```
-
-The current implementation establishes user authentication at the Azure Static Web Apps layer.
-
-It does not yet implement backend API authorization based on the authenticated user's identity or roles.
-
-The current Fortune Management UI is therefore not protected by backend-enforced application roles.
-
-Backend authorization is planned for a later roadmap step.
+This scope represents normal signed-in user access to the backend API. It is distinct from administrative authorization.
 
 ---
 
-## Current Trust Boundary
+## Role-Based Authorization
 
-The current user trust boundary is:
+Administrative Fortune operations are protected by the app role:
+
+```text
+Fortune.Admin
+```
+
+The role is defined on the backend API application registration and assigned through Microsoft Entra ID.
+
+The backend checks the token's `roles` claim and enforces the administrative boundary with Spring Security.
+
+Conceptually:
+
+```text
+Signed-in user
+  │
+  ├─ access_as_user
+  │      └─ normal protected API access
+  │
+  └─ Fortune.Admin
+         └─ Fortune Management operations
+```
+
+The React frontend also uses role information to control whether Fortune Management UI elements are displayed. Frontend visibility is a user-experience control only; the backend remains responsible for authorization.
+
+---
+
+## Backend API Boundary
+
+The backend is deployed as an independently reachable Azure Container Apps endpoint.
+
+The security boundary is therefore the backend's own Spring Security configuration, not the fact that a request came from Azure Static Web Apps.
+
+CORS permits the expected local and deployed frontend origins. CORS is a browser access-control mechanism and is not used as authentication or authorization.
+
+The current request flow is:
+
+```text
+Authenticated user
+  │
+  ▼
+React + MSAL
+  │
+  ▼
+Backend API access token
+  │
+  ▼
+Azure Container Apps ingress
+  │
+  ▼
+Spring Security
+  │
+  ├─ authenticate JWT
+  └─ authorize scope / role
+```
+
+---
+
+## Tenant Boundary
+
+The Azure subscription resources and Microsoft Entra ID resources can have independent lifecycles.
+
+```text
+Azure Subscription
+  │
+  ├─ Azure Static Web Apps
+  ├─ Azure Container Apps
+  ├─ Azure Container Registry
+  ├─ Azure SQL Database
+  └─ User Assigned Managed Identities
+
+Microsoft Entra tenant used by the application
+  │
+  ├─ React SPA App Registration
+  ├─ Backend API App Registration
+  ├─ Service Principals
+  ├─ Delegated API scope
+  ├─ App role
+  └─ Users / role assignments
+```
+
+The Azure environment can be rebuilt while the Microsoft Entra application registrations are reused or reconfigured as appropriate.
+
+---
+
+## User Identity and Database Identity
+
+User authentication and backend database authentication are separate security boundaries.
+
+### User Identity
 
 ```text
 User
@@ -298,83 +297,15 @@ User
 Microsoft Entra ID
   │
   ▼
-Azure Static Web Apps
-```
-
-Azure Static Web Apps protects the deployed frontend entry point.
-
-However, the Azure Container Apps backend is deployed as a separate API endpoint.
-
-The backend does not yet independently verify that a request originated from an authenticated Azure Static Web Apps user.
-
-Therefore:
-
-```text
-Authenticated access to the frontend
-```
-
-does not currently mean:
-
-```text
-Independent authentication and authorization at the backend API
-```
-
-This limitation is intentional in the current roadmap and is addressed in a later step.
-
----
-
-## Backend API Boundary
-
-The current frontend-to-backend request flow is:
-
-```text
-Authenticated user
+MSAL access token
   │
   ▼
-Azure Static Web Apps
-  │
-  ▼
-React frontend
-  │
-  ▼
-Azure Container Apps ingress
-  │
-  ▼
-Spring Boot REST API
+Spring Security
 ```
 
-The browser calls the Azure Container Apps endpoint configured during the frontend build.
-
-CORS permits expected frontend origins, including the deployed Azure Static Web Apps origin.
-
-CORS is a browser access-control mechanism.
-
-CORS is not an authentication or authorization mechanism.
-
-The backend API currently relies on the frontend entry-point architecture rather than independently validating a user token.
-
----
-
-## User Identity and Database Identity
-
-The application uses two separate identity concepts.
-
-### User Identity
-
-The user's identity is established through:
-
-```text
-Microsoft Entra ID
-  │
-  ▼
-Azure Static Web Apps
-```
-
-This identity determines whether the user can access the authenticated frontend.
+This identity is used for backend API authentication and application authorization.
 
 ### Application Database Identity
-
-The backend's database identity is established through:
 
 ```text
 Azure Container Apps
@@ -389,41 +320,9 @@ Microsoft Entra authentication
 Azure SQL Database
 ```
 
-This identity allows the Spring Boot application to access Azure SQL Database.
+The deployed backend does not store a database password.
 
-The database does not receive or authorize the end user's identity in the current architecture.
-
-Therefore:
-
-```text
-User identity
-```
-
-and:
-
-```text
-Application database identity
-```
-
-are separate security boundaries.
-
-For data-access architecture and database permissions, see:
-
-```text
-docs/step04-data-access.md
-```
-
----
-
-## Azure SQL Authentication Boundary
-
-The deployed Spring Boot backend authenticates with Azure SQL Database through a User Assigned Managed Identity.
-
-The application does not use a database password for the deployed backend connection.
-
-The Managed Identity receives only the object-level permissions required by the current Fortune functionality.
-
-The current database permissions are:
+The database receives the application's Managed Identity rather than the end user's identity. The Managed Identity has only the object-level permissions required by the Fortune functionality:
 
 ```text
 SELECT
@@ -437,145 +336,95 @@ on:
 dbo.fortunes
 ```
 
-These permissions belong to the application identity, not to the authenticated frontend user.
+For data-access architecture and database permissions, see:
+
+```text
+docs/step04-data-access.md
+```
 
 ---
 
-## Build-time Authentication Configuration
+## Build-Time Authentication Configuration
 
-The Azure Static Web Apps authentication configuration is generated during the frontend build.
+The frontend build receives the Microsoft Entra configuration needed by MSAL through environment variables.
 
-The source template is stored in:
-
-```text
-scripts/staticwebapp.config.template.json
-```
-
-The generated configuration is written to:
+The relevant Vite values include:
 
 ```text
-frontend/dist/staticwebapp.config.json
+VITE_ENTRA_TENANT_ID
+VITE_ENTRA_CLIENT_ID
+VITE_API_SCOPE
 ```
 
-The build requires:
+The deployment scripts prepare the frontend build without hardcoding environment-specific identity values into the application source.
 
-```text
-ENTRA_TENANT_ID
-```
-
-The tenant-specific value is supplied during the build process rather than being hard-coded into the committed generated output.
-
-Files under:
+Generated files under:
 
 ```text
 frontend/dist
 ```
 
-are generated artifacts and must not be committed.
+are build artifacts and must not be committed.
 
 ---
 
-## Azure Static Web Apps Application Settings
+## Authentication Setup and Reproduction
 
-Azure Static Web Apps must contain the application settings referenced by the generated authentication configuration.
-
-These settings include the values required by the custom Microsoft Entra ID authentication provider.
-
-Sensitive values, including the Client Secret, are stored outside the repository.
-
-The application settings are configured through the authentication setup process.
-
-For the setup procedure, see:
+The setup procedure for the two App Registrations, delegated API permission, and app role is maintained in:
 
 ```text
 docs/authentication-setup.md
 ```
 
----
+The setup process includes the information required to reproduce:
 
-## App Registration Lifecycle
-
-The App Registration belongs to the authentication tenant.
-
-The identity deployment process reuses the existing App Registration when possible.
-
-This supports rebuilding the Azure application environment while retaining the authentication identity configuration.
-
-When a newly deployed Azure Static Web App requires authentication configuration, the existing App Registration can be updated with the required redirect URI and related settings.
-
-The App Registration lifecycle is independent from the Azure subscription resource lifecycle.
+- The backend API App Registration.
+- The React SPA App Registration.
+- The `access_as_user` delegated scope.
+- Delegated permission from the SPA to the backend API.
+- The `Fortune.Admin` app role.
+- Required SPA redirect URIs.
+- Application configuration used by the frontend and backend.
 
 ---
 
-## Client Secret Lifecycle
+## Authentication and Authorization Verification
 
-Client Secret values can be viewed only when they are created.
+The current implementation is considered verified when the following behaviors are confirmed:
 
-An existing secret value cannot be retrieved later.
+- A configured user can sign in through the React application with MSAL.
+- The React application can acquire a backend API access token.
+- A protected backend endpoint rejects unauthenticated requests with `401 Unauthorized`.
+- A valid access token allows normal protected API access.
+- The `Fortune.Admin` role allows protected Fortune Management operations.
+- A user without the administrative role cannot perform protected administrative operations.
+- The frontend hides administrative UI elements when the user does not have the required role.
+- Logout completes successfully.
+- No access token, refresh token, client secret, or other credential is committed to the repository.
 
-The authentication setup scripts therefore distinguish between:
-
-- Reusing an existing credential
-- Creating an additional Client Secret
-- Configuring a newly deployed Azure Static Web App
-
-The default behavior avoids creating unnecessary duplicate credentials.
-
-An additional secret can be created when required for a rebuilt Azure environment.
-
-Existing credentials are preserved unless explicitly removed outside the current setup scripts.
-
-Secrets must be handled only long enough to configure the target Azure Static Web App.
-
----
-
-## Authentication Exit Criteria
-
-The authentication implementation is considered verified when:
-
-- Azure Static Web Apps is integrated with Microsoft Entra ID.
-- Login succeeds for a registered external user.
-- Login succeeds for a registered native authentication-tenant user.
-- Access is denied for an unregistered user.
-- The post-login application redirection succeeds.
-- Authenticated identity information is available through `/.auth/me`.
-- Logout succeeds.
-- No Client Secret or token value is committed to the repository.
+Deployment verification and application E2E scenario verification are separate from these authentication and authorization checks.
 
 ---
 
 ## Current Limitations
 
-The current authentication implementation has the following intentional limitations:
+The current identity design intentionally retains the following boundaries:
 
-- The backend does not independently validate the authenticated user's token.
-- The backend does not implement user-based API authorization.
-- Fortune Management operations are not protected by backend-enforced application roles.
 - The end user's identity is not propagated to Azure SQL Database.
-- Database access uses the application's Managed Identity rather than the end user's identity.
+- Database access uses the backend application's User Assigned Managed Identity.
 - Identity lifecycle automation is not yet implemented.
 - User invitation and onboarding are not yet automated.
 - Access reviews are not yet implemented.
 
-These limitations are addressed by later roadmap steps.
+These are separate roadmap concerns and do not mean that backend API authentication or role-based authorization is missing from the current implementation.
 
 ---
 
 ## Future Direction
 
-A later roadmap step introduces backend API authentication and authorization.
+Future identity work focuses on lifecycle management rather than adding the already implemented backend authentication boundary.
 
 Planned areas include:
-
-- Azure Static Web Apps to Azure Container Apps token propagation
-- JWT validation in Spring Boot
-- Spring Security integration
-- API authentication
-- API authorization
-- Role-based access control
-- Protected Fortune Management operations
-
-Identity lifecycle work is planned separately and includes areas such as:
 
 - User invitation
 - Onboarding
@@ -589,10 +438,9 @@ Identity lifecycle work is planned separately and includes areas such as:
 
 Do not commit:
 
-- Client Secrets
 - Access tokens
 - Refresh tokens
-- Real `/.auth/me` responses
+- Client secrets used by tools or other integrations
 - Tenant-specific secret values
 - Azure Static Web Apps deployment tokens
 - Real user identities
@@ -610,7 +458,6 @@ Avoid placing real identity values in:
 
 Use appropriate secret-storage locations such as:
 
-- Azure Static Web Apps application settings
 - GitHub Actions secrets
 - Azure Key Vault
 - Local user environment variables
@@ -637,26 +484,26 @@ Deployment procedures:
 docs/deployment.md
 ```
 
-Troubleshooting:
-
-```text
-docs/troubleshooting.md
-```
-
-Step 3 implementation history:
-
-```text
-docs/step03-authentication.md
-```
-
 Step 4 data-access and Managed Identity details:
 
 ```text
 docs/step04-data-access.md
 ```
 
-Testing and verification definitions:
+Step 5 Microsoft Entra ID authentication and authorization:
 
 ```text
-docs/testing.md
+docs/step05-entra-id-authentication-authorization.md
+```
+
+Step 6 CI/CD and deployment verification:
+
+```text
+docs/step06-cicd.md
+```
+
+Troubleshooting:
+
+```text
+docs/troubleshooting.md
 ```

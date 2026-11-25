@@ -1,27 +1,27 @@
 # spring-azure-serverless-demo
 
-Spring Boot Web アプリケーションを Microsoft Azure 上のサーバーレスアーキテクチャへ段階的に発展させる、ハンズオンプロジェクトです。
+Spring Boot Webアプリケーションを、Microsoft Azure上のサーバーレスアーキテクチャへ段階的に発展させるハンズオンプロジェクトです。
 
 現在の実装では、以下を組み合わせています。
 
-- React と Vite
+- ReactとVite
 - Azure Static Web Apps
 - Spring Boot
 - Azure Container Apps
 - Azure Container Registry
 - Azure SQL Database
-- Microsoft Entra ID 認証
-- MSAL を使用した React の認証とアクセストークンの取得
+- Microsoft Entra ID認証
+- MSALを使用したReactの認証とアクセストークン取得
 - Spring Security OAuth 2.0 Resource Server
-- ユーザー割り当てマネージド ID
-- Bicep による Infrastructure as Code
+- ユーザー割り当てマネージドID
+- BicepによるInfrastructure as Code
 - Cloud Native Buildpacks
 
-React フロントエンドは Azure Static Web Apps でホストされ、Azure Container Apps 上で稼働する Spring Boot REST API と通信します。
+ReactフロントエンドはAzure Static Web Appsでホストされ、Azure Container Apps上で実行されるSpring Boot REST APIと通信します。
 
-アプリケーションデータは Azure SQL Database に保存されます。デプロイされたバックエンドは、ユーザー割り当てマネージド ID を使用してデータベースにアクセスします。
+アプリケーションデータはAzure SQL Databaseに保存されます。デプロイされたバックエンドは、ユーザー割り当てマネージドIDを使用してデータベースにアクセスします。
 
-> このリポジトリは、学習、実験、アーキテクチャ検証を目的としています。本番環境で使用する前に、すべての設定を確認してください。
+> このリポジトリは、学習、実験、およびアーキテクチャ検証を目的としています。本番環境で使用する前に、すべての設定を確認してください。
 
 ---
 
@@ -29,26 +29,28 @@ React フロントエンドは Azure Static Web Apps でホストされ、Azure 
 
 現在、アプリケーションは以下をサポートしています。
 
-- Azure Static Web Apps を介した Microsoft Entra ID 認証
-- MSAL を使用した React の認証とバックエンド API 用アクセストークンの取得
-- React フロントエンドへの認証済みアクセス
-- Microsoft Entra ID アクセストークンによるバックエンド API 認証
-- Spring Security による JWT 検証
-- `access_as_user` スコープを介した委任 API アクセス
-- `Fortune.Admin` アプリロールによるロールベースの API 認可
-- ロールに基づく Fortune 管理 UI の表示制御
-- ランダムな Fortune の取得
-- Azure SQL に保存された Fortune データ
-- リソースベースおよびデータベースベースの Spring プロファイル
-- Fortune の一覧表示
-- Fortune の作成
-- Fortune の削除
-- React フロントエンドを介した Fortune 管理
-- マネージド ID による Azure SQL アクセス
-- 最小権限かつオブジェクトレベルのデータベース権限
-- Bicep による Azure インフラストラクチャのデプロイ
-- Cloud Native Buildpacks によるバックエンド OCI イメージの作成
+- MSALを介したMicrosoft Entra IDによるReact認証
+- MSALによるバックエンドAPIアクセストークンの取得
+- Microsoft Entra IDアクセストークンによるバックエンドAPI認証
+- Spring SecurityによるJWT検証
+- `access_as_user`スコープを介した委任APIアクセス
+- `Fortune.Admin`アプリロールによるロールベースのAPI認可
+- ロールに基づくFortune管理UIの表示制御
+- ランダムなFortuneの取得
+- Azure SQLを使用したFortuneデータ
+- リソースベースおよびデータベースベースのSpringプロファイル
+- Fortuneの一覧表示
+- Fortuneの作成
+- Fortuneの削除
+- ReactフロントエンドによるFortune管理
+- マネージドIDを使用したAzure SQLアクセス
+- 最小権限に基づくオブジェクトレベルのデータベース権限
+- BicepによるAzureインフラストラクチャのデプロイ
+- Cloud Native BuildpacksによるバックエンドOCIイメージの作成
 - スクリプトによるビルド、デプロイ、検証
+- GitHub ActionsによるCI/CD
+- GitHub OIDCを使用したAzure認証
+- バックエンドとフロントエンドの自動デプロイ検証
 
 ---
 
@@ -56,45 +58,56 @@ React フロントエンドは Azure Static Web Apps でホストされ、Azure 
 
 ### 完了
 
-- [x] Step 1: Bicep による Azure インフラストラクチャのプロビジョニング
-- [x] Step 2: React フロントエンドと Azure Static Web Apps の統合
-- [x] Step 3: Microsoft Entra ID 認証
+- [x] Step 1: BicepによるAzureインフラストラクチャのプロビジョニング
+- [x] Step 2: ReactフロントエンドとAzure Static Web Appsの統合
+- [x] Step 3: Microsoft Entra ID認証
 - [x] Step 4: データアクセス
-  - [x] Step 4.1: Azure SQL Database インフラストラクチャ
-  - [x] Step 4.2: Azure SQL を使用した Fortune データアクセス
-  - [x] Step 4.3: Fortune 管理
-- [x] Step 5: Microsoft Entra ID の認証と認可
-  - [x] MSAL による React の認証
-  - [x] `access_as_user` を使用したバックエンド API 用アクセストークン
-  - [x] Spring Security JWT 認証
-  - [x] `Fortune.Admin` アプリロールによる認可
-  - [x] ロールベースの Fortune 管理 UI
+  - [x] Step 4.1: Azure SQL Databaseインフラストラクチャ
+  - [x] Step 4.2: Azure SQLを使用したFortuneデータアクセス
+  - [x] Step 4.3: Fortune管理
+- [x] Step 5: Microsoft Entra IDによる認証と認可
+  - [x] MSALによるReact認証
+  - [x] `access_as_user`を使用したバックエンドAPIアクセストークン
+  - [x] Spring SecurityによるJWT認証
+  - [x] `Fortune.Admin`アプリロールによる認可
+  - [x] ロールに基づくFortune管理UI
+- [x] Step 6: CI/CD
+  - [x] バックエンドとフロントエンドの自動テスト
+  - [x] バックエンドOCIイメージのビルドとACRへのプッシュ
+  - [x] Azure Container Appsへのデプロイ
+  - [x] Azure Static Web Appsへのデプロイ
+  - [x] バックエンドとフロントエンドのデプロイ検証
 
-Step 4 の実装詳細は、以下に記載されています。
+Step 4の実装の詳細は、以下に記載されています。
 
 ```text
 docs/step04-data-access.md
 ```
 
-Step 5 の実装詳細は、以下に記載されています。
+Step 5の実装の詳細は、以下に記載されています。
 
 ```text
 docs/step05-entra-id-authentication-authorization.md
 ```
 
-### 計画中
-
-- [ ] Step 6: CI/CD
-- [ ] Step 7: Spring Boot Diagnostics（Spring Boot Actuator、BootUI、BootUI MCP を使用した AI 支援によるローカル診断）
-- [ ] Step 8: Observability（OpenTelemetry と Apache SkyWalking による HTTP、Spring Boot、Azure SQL を横断するトレーシング）
-- [ ] Step 9: ID ライフサイクル管理
-- [ ] Step 10: 代替アーキテクチャとして、Static Web Apps を Buildpacks ベースのフロントエンドコンテナーに置き換える
-- [ ] Step 11: AI / RAG（Azure OpenAI、RAG、AI 処理の OpenTelemetry トレーシング）
-
-今後のロードマップドキュメントでは、以下の命名パターンを使用します。
+Step 6の実装の詳細は、以下に記載されています。
 
 ```text
 docs/step06-cicd.md
+docs/step06-cicd-ja.md
+```
+
+### 計画中
+
+- [ ] Step 7: Spring Boot Actuator、BootUI、BootUI MCPを使用した、AI支援によるローカル診断を含むSpring Boot診断
+- [ ] Step 8: HTTP、Spring Boot、Azure SQL間のトレースにOpenTelemetryとApache SkyWalkingを使用する可観測性
+- [ ] Step 9: IDライフサイクル管理
+- [ ] Step 10: 代替アーキテクチャとしてStatic Web AppsをBuildpacksベースのフロントエンドコンテナーに置き換え
+- [ ] Step 11: Azure OpenAI、RAG、およびAI処理のOpenTelemetryトレースを使用したAI / RAG
+
+今後のロードマップドキュメントには、以下の命名規則を使用します。
+
+```text
 docs/step07-spring-boot-diagnostics.md
 docs/step08-observability.md
 docs/step09-identity-lifecycle.md
@@ -112,51 +125,56 @@ docs/step11-ai-rag.md
   ▼
 Azure Static Web Apps
   │
-  ├── React + Vite
-  │     │
-  │     ├── SWA サインイン: spring-azure-serverless-demo-auth
-  │     │
-  │     └── MSAL クライアント: spring-azure-serverless-demo-client
-  │             │
-  │             │ access_as_user
-  │             │ バックエンド API 用アクセストークン
-  │             ▼
-  │       spring-azure-serverless-demo-api
-  │             │
-  │             │ Authorization: Bearer <access-token>
-  │             ▼
-  └────────── HTTPS / CORS ──────────► Azure Container Apps
-                                        │
-                                        └── Spring Boot REST API
-                                              │
-                                              ├── Spring Security
-                                              │     ├── JWT 検証
-                                              │     └── Fortune.Admin 認可
-                                              │
-                                              │ ユーザー割り当てマネージド ID
-                                              ▼
-                                        Azure SQL Database
-                                              │
-                                              └── dbo.fortunes
+  └── React + Vite
+          │
+          └── MSALクライアント: spring-azure-serverless-demo-client
+                  │
+                  │ access_as_user
+                  │ バックエンドAPIアクセストークン
+                  ▼
+            spring-azure-serverless-demo-api
+                  │
+                  │ Authorization: Bearer <access-token>
+                  ▼
+          HTTPS / CORS
+                  │
+                  ▼
+          Azure Container Apps
+                  │
+                  └── Spring Boot REST API
+                        │
+                        ├── Spring Security
+                        │     ├── JWT検証
+                        │     └── Fortune.Admin認可
+                        │
+                        │ ユーザー割り当てマネージドID
+                        ▼
+                  Azure SQL Database
+                        │
+                        └── dbo.fortunes
 ```
 
-Azure Static Web Apps は、認証済みフロントエンドのエントリーポイントを提供します。React は MSAL も使用し、バックエンド API を対象（audience）とするアクセストークンを取得します。
+Azure Static Web Appsは、Reactフロントエンドを静的Webアプリケーションとしてホストします。
 
-Azure Container Apps は Spring Boot バックエンドをホストします。Spring Security は、保護された API リクエストがアプリケーションに到達する前に、Bearer JWT アクセストークンを独立して検証します。
+Reactは、Microsoft Entra IDへのサインインと、対象ユーザーがバックエンドAPIであるアクセストークンの取得にMSALを使用します。
 
-`access_as_user` 委任スコープは、サインインしたユーザーによるバックエンド API へのアクセスを表します。`Fortune.Admin` アプリロールは、バックエンド API 用アクセストークンの `roles` クレームに格納され、管理 API の操作に必要です。
+ローカル環境とAzure環境の両方で同じMSALベースの認証フローを使用することで、環境固有の動作を減らし、検証を簡素化します。
 
-Azure SQL Database は永続的な Fortune データを提供します。
+Azure Container AppsはSpring Bootバックエンドをホストします。Spring Securityは、保護されたAPIリクエストがアプリケーションに到達する前に、Bearer JWTアクセストークンを独立して検証します。
 
-バックエンドは、アプリケーションにデータベースパスワードを保存することなく、ユーザー割り当てマネージド ID を介して Azure SQL にアクセスします。
+`access_as_user`委任スコープは、サインインしたユーザーによるバックエンドAPIへのアクセスを表します。`Fortune.Admin`アプリロールは、バックエンドAPIアクセストークンの`roles`クレームに含まれ、管理API操作に必要です。
 
-現在のシステム構造、コンポーネントの責務、ID の境界、データアクセスプロファイルについては、以下を参照してください。
+Azure SQL Databaseは、永続的なFortuneデータを提供します。
+
+バックエンドは、アプリケーションにデータベースパスワードを保存せず、ユーザー割り当てマネージドIDを介してAzure SQLにアクセスします。
+
+現在のシステム構成、コンポーネントの責務、IDの境界、およびデータアクセスプロファイルについては、以下を参照してください。
 
 ```text
 docs/architecture.md
 ```
 
-Step 5 の ID と認可の設計については、以下を参照してください。
+Step 5のIDおよび認可設計については、以下を参照してください。
 
 ```text
 docs/step05-entra-id-authentication-authorization.md
@@ -169,19 +187,19 @@ docs/step05-entra-id-authentication-authorization.md
 ```text
 spring-azure-serverless-demo/
 ├── backend/
-│   └── Spring Boot アプリケーション
+│   └── Spring Bootアプリケーション
 │
 ├── frontend/
-│   └── React + Vite アプリケーション
+│   └── React + Viteアプリケーション
 │
 ├── database/
-│   └── Azure SQL のスキーマ、シードデータ、セキュリティ構成
+│   └── Azure SQLスキーマ、シードデータ、セキュリティ構成
 │
 ├── config/
-│   └── 環境固有の非機密構成
+│   └── 環境固有の非シークレット設定
 │
 ├── infra/
-│   └── Bicep で定義された Azure インフラストラクチャ
+│   └── Bicepで定義されたAzureインフラストラクチャ
 │
 ├── scripts/
 │   └── ビルド、デプロイ、構成、検証用スクリプト
@@ -193,7 +211,7 @@ spring-azure-serverless-demo/
 └── README.md
 ```
 
-環境固有の非機密設定は、以下に保存されます。
+環境固有の非シークレット設定は、以下に保存されます。
 
 ```text
 config/
@@ -205,7 +223,7 @@ config/
 config/dev.psd1
 ```
 
-このファイルに機密値を保存しないでください。
+シークレット値をこのファイルに保存しないでください。
 
 ---
 
@@ -215,11 +233,11 @@ config/dev.psd1
 
 - Azure CLI
 - Bicep CLI
-- Azure Container Apps CLI 拡張機能
+- Azure Container Apps CLI拡張機能
 - Java 21
 - Maven Wrapper
-- Node.js と npm
-- Docker 互換のコンテナーランタイム
+- Node.jsとnpm
+- Docker互換のコンテナーランタイム
 - Git
 - PowerShell
 - sqlcmd
@@ -230,30 +248,30 @@ config/dev.psd1
 docker info
 ```
 
-バックエンドに Dockerfile は必要ありません。
+バックエンドにDockerfileは必要ありません。
 
-バックエンド OCI イメージは Spring Boot Buildpacks で作成されます。Buildpacks によるビルドをローカルで実行するには、Docker 互換のランタイムが引き続き必要です。
+バックエンドOCIイメージはSpring Boot Buildpacksで作成されます。Buildpacksのビルドをローカルで実行するため、Docker互換のランタイムは引き続き必要です。
 
-Azure Static Web Apps CLI は、フロントエンドのデプロイスクリプトから `npx` を介して呼び出されます。
+Azure Static Web Apps CLIは、フロントエンドのデプロイスクリプトによって`npx`経由で呼び出されます。
 
-通常のデプロイフローでは、グローバルにインストールされた `swa` コマンドは必要ありません。
+通常のデプロイフローでは、グローバルにインストールされた`swa`コマンドは必要ありません。
 
 ---
 
 ## 必要な環境変数
 
-一部のビルドおよびデプロイ操作には、開発者が準備する必要のある環境変数があります。
+一部のビルドおよびデプロイ操作では、開発者が事前に用意する必要がある環境変数を使用します。
 
 ```text
 ENTRA_TENANT_ID
 SWA_DEPLOYMENT_TOKEN
 ```
 
-`ENTRA_TENANT_ID` は、Azure Static Web Apps の認証構成を生成するときに使用されます。
+`ENTRA_TENANT_ID`はAzure Container Appsのバックエンドに渡され、Spring SecurityがバックエンドAPIアクセストークンを検証するためのMicrosoft Entra JWT発行者を構成する際に使用されます。
 
-`SWA_DEPLOYMENT_TOKEN` は、生成されたフロントエンドを Azure Static Web Apps にデプロイするときに使用されます。
+`SWA_DEPLOYMENT_TOKEN`は、生成されたフロントエンドをAzure Static Web Appsにデプロイする際に使用されます。
 
-値を表示せずに、それらが設定されていることを確認します。
+値を出力せずに、環境変数が使用可能か確認します。
 
 ```powershell
 if ($env:ENTRA_TENANT_ID) {
@@ -271,14 +289,14 @@ else {
 }
 ```
 
-以下の Vite の値はフロントエンドのビルドプロセスで生成され、通常は手動で準備する必要はありません。
+以下のViteの値はフロントエンドのビルドプロセスによって生成され、通常は手動で用意する必要はありません。
 
 ```text
 VITE_API_BASE_URL
 VITE_BUILD_VERSION
 ```
 
-機密値をリポジトリにコミットしないでください。
+シークレット値をリポジトリにコミットしないでください。
 
 ---
 
@@ -287,37 +305,34 @@ VITE_BUILD_VERSION
 全体的なデプロイフローは以下のとおりです。
 
 ```text
-前提条件と Azure コンテキストを確認
+前提条件とAzureコンテキストを確認
         │
         ▼
-共有 Azure インフラストラクチャをプロビジョニング
+共有Azureインフラストラクチャをプロビジョニング
         │
         ▼
-Azure SQL をデプロイして検証
+Azure SQLをデプロイして検証
         │
         ▼
-バックエンド OCI イメージをビルド
+バックエンドOCIイメージをビルド
         │
         ▼
-バックエンドを Azure Container Apps にデプロイ
+バックエンドをAzure Container Appsにデプロイ
         │
         ▼
-Microsoft Entra ID のアプリ登録、API スコープ、アプリロールを構成
+Microsoft Entra IDアプリ登録、APIスコープ、アプリロールを構成
         │
         ▼
-React フロントエンドをビルド
+Reactフロントエンドをビルド
         │
         ▼
-フロントエンドを Azure Static Web Apps にデプロイ
+フロントエンドをAzure Static Web Appsにデプロイ
         │
         ▼
-Azure Static Web Apps の認証を構成
-        │
-        ▼
-サインイン、アクセストークンを使用した API 呼び出し、ロールベース認可を検証
+サインイン、アクセストークンを使用したAPI呼び出し、ロールベースの認可を検証
 ```
 
-主なアプリケーションデプロイスクリプトは以下のとおりです。
+主要なアプリケーションデプロイスクリプトは以下のとおりです。
 
 ```text
 scripts/whatif-infra.ps1
@@ -328,19 +343,13 @@ scripts/build-backend.ps1
 scripts/deploy-backend.ps1
 scripts/build-frontend.ps1
 scripts/deploy-frontend.ps1
+scripts/verify-backend-deployment.ps1
+scripts/verify-frontend-deployment.ps1
 ```
 
-Azure Static Web Apps の認証設定では、以下を使用します。
+バックエンドAPIのアプリ登録では、`access_as_user`委任スコープを公開し、`Fortune.Admin`アプリロールも定義する必要があります。Reactクライアントのアプリ登録には、`access_as_user`への委任アクセス許可を付与する必要があります。現在の構成と検証手順については、Step 5のドキュメントを参照してください。
 
-```text
-scripts/41-deploy-identity.ps1
-scripts/42-create-client-secret.ps1
-scripts/43-configure-swa-auth.ps1
-```
-
-バックエンド API のアプリ登録では、`access_as_user` 委任スコープを公開し、`Fortune.Admin` アプリロールも定義する必要があります。React クライアントのアプリ登録には、`access_as_user` への委任アクセス許可を付与する必要があります。現在の構成と検証手順については、Step 5 のドキュメントを参照してください。
-
-完全なデプロイ順序、前提条件、テナントの切り替え、ビルド設定、検証コマンドについては、以下を参照してください。
+完全なデプロイ順序、前提条件、テナントの切り替え、ビルド設定、および検証コマンドについては、以下を参照してください。
 
 ```text
 docs/deployment.md
@@ -350,53 +359,51 @@ docs/deployment.md
 
 ## ローカル開発
 
-Spring Boot バックエンドは通常、以下で実行されます。
+Spring Bootバックエンドは通常、以下で実行されます。
 
 ```text
 http://localhost:8080
 ```
 
-React 開発サーバーは通常、以下で実行されます。
+React開発サーバーは通常、以下で実行されます。
 
 ```text
 http://localhost:5173
 ```
 
-`VITE_API_BASE_URL` が指定されていない場合、フロントエンドは以下を使用します。
+`VITE_API_BASE_URL`が指定されていない場合、フロントエンドは以下をバックエンドAPIのベースURLとして使用します。
 
 ```text
 http://localhost:8080
 ```
 
-これをバックエンド API のベース URL として使用します。
-
-バックエンドは、以下の 2 つのデータアクセスプロファイルをサポートしています。
+バックエンドは、次の2つのデータアクセスプロファイルをサポートします。
 
 ```text
 resource
 database
 ```
 
-`resource` プロファイルは、アプリケーションに同梱された Fortune データを読み取ります。
+`resource`プロファイルは、アプリケーションにバンドルされたFortuneデータを読み取ります。
 
-`database` プロファイルは Azure SQL Database を使用します。
+`database`プロファイルはAzure SQL Databaseを使用します。
 
-フロントエンドの本番ビルドは、Vite プレビューサーバーを介してローカルでもテストできます。
+フロントエンドの本番ビルドは、Viteプレビューサーバーを介してローカルでテストすることもできます。
 
 ```text
 http://localhost:4173
 ```
 
-バックエンドの CORS 構成では、以下の両方のローカルフロントエンドオリジンが許可されています。
+バックエンドのCORS構成では、以下の両方のローカルフロントエンドオリジンが許可されています。
 
 ```text
 http://localhost:5173
 http://localhost:4173
 ```
 
-保護された API の呼び出しには、有効なバックエンド API 用アクセストークンが必要です。そのためローカルのフロントエンド認証でも、ローカルオリジンに対して React/MSAL のリダイレクト URI とバックエンド API のアクセス許可を構成する必要があります。
+保護されたAPIの呼び出しには、有効なバックエンドAPIアクセストークンが必要です。そのため、ローカルフロントエンド認証でも、ローカルオリジンに対するReact/MSALリダイレクトURIとバックエンドAPIアクセス許可の構成が必要です。
 
-Step 4 固有のローカル実行とデータアクセスの詳細は、以下に記載されています。
+Step 4固有のローカル実行とデータアクセスの詳細は、以下に記載されています。
 
 ```text
 docs/step04-data-access.md
@@ -406,7 +413,7 @@ docs/step04-data-access.md
 
 ## ビルドとデプロイ
 
-バックエンドイメージは Spring Boot Buildpacks でビルドされます。
+バックエンドイメージはSpring Boot Buildpacksでビルドされます。
 
 ビルドでは以下を使用します。
 
@@ -415,27 +422,27 @@ Paketo Noble Java Tiny Builder
 linux/amd64
 ```
 
-可変の `latest` タグに依存する代わりに、バージョン固定のビルダーイメージを使用します。
+変更可能な`latest`タグに依存する代わりに、バージョンが固定されたビルダーイメージを使用します。
 
-フロントエンドビルドは、デプロイ済み Azure Container App のエンドポイントを解決し、以下を介して Vite に渡します。
+フロントエンドのビルドは、デプロイされたAzure Container Appのエンドポイントを解決し、以下を介してViteに渡します。
 
 ```text
 VITE_API_BASE_URL
 ```
 
-フロントエンドのデプロイスクリプトは、以下を介して Azure Static Web Apps CLI を呼び出します。
+フロントエンドのデプロイスクリプトは、以下を介してAzure Static Web Apps CLIを呼び出します。
 
 ```text
 npx @azure/static-web-apps-cli
 ```
 
-ビルドとデプロイの詳細な手順は、以下で管理されています。
+詳細なビルドおよびデプロイ手順は、以下で管理されています。
 
 ```text
 docs/deployment.md
 ```
 
-Microsoft Entra ID、MSAL、バックエンドの JWT 検証、ロール割り当ての詳細は、以下で管理されています。
+Microsoft Entra ID、MSAL、バックエンドのJWT検証、およびロール割り当ての詳細は、以下で管理されています。
 
 ```text
 docs/step05-entra-id-authentication-authorization.md
@@ -445,37 +452,40 @@ docs/step05-entra-id-authentication-authorization.md
 
 ## 認証
 
-アプリケーションは、認証に Microsoft Entra ID を使用します。
+アプリケーションは、認証にMicrosoft Entra IDを使用します。
 
-Azure Static Web Apps は引き続き認証済みフロントエンドのエントリーポイントとして機能し、React アプリケーションも MSAL を使用してユーザーをサインインさせ、Spring Boot バックエンド API 用のアクセストークンを取得します。
+Reactアプリケーションは、ローカル環境とAzure環境の両方で、アプリケーションユーザーの認証メカニズムとしてMSALを使用します。
 
-認証リソースは、Azure サブスクリプションのリソースとは独立したライフサイクルを持つことができる認証テナントに属します。
+Azure Static Web Appsは静的フロントエンドのホスティングを提供しますが、独立したアプリケーション認証レイヤーは追加しません。
+
+サインイン後、MSALはSpring BootバックエンドAPI用のアクセストークンを取得します。
+
+認証リソースは、Azureサブスクリプションのリソースとは独立したライフサイクルを持つことができる認証テナントに属します。
 
 ### アプリ登録
 
-ID アーキテクチャでは、3 つのアプリ登録に責務を分離しています。
+現在のIDアーキテクチャでは、2つのアプリ登録に責務を分離しています。
 
-- `spring-azure-serverless-demo-auth`
-  - Azure Static Web Apps の認証を提供します。
 - `spring-azure-serverless-demo-client`
-  - React/MSAL パブリッククライアントを表します。
-  - バックエンド API の `access_as_user` 委任アクセス許可を要求します。
+  - React/MSALパブリッククライアントを表します。
+  - Microsoft Entra IDでユーザーをサインインさせます。
+  - バックエンドAPIの`access_as_user`委任アクセス許可を要求します。
 - `spring-azure-serverless-demo-api`
-  - Spring Boot リソースサーバーを表します。
-  - `access_as_user` 委任スコープを公開します。
-  - `Fortune.Admin` アプリロールを定義します。
+  - Spring Bootリソースサーバーを表します。
+  - `access_as_user`委任スコープを公開します。
+  - `Fortune.Admin`アプリロールを定義します。
 
-### バックエンド API 用アクセストークン
+### バックエンドAPIアクセストークン
 
-サインイン後、MSAL はバックエンド API 用のトークンを取得します。React は API リクエストで、そのトークンを Bearer トークンとして送信します。
+サインイン後、MSALはバックエンドAPI用のトークンを取得します。Reactは、APIリクエストでこのトークンをBearerトークンとして送信します。
 
 ```http
 Authorization: Bearer <access-token>
 ```
 
-バックエンド API 用アクセストークンと React クライアントの ID トークンには、それぞれ異なる目的があります。API トークンは、バックエンド API のスコープとロールの参照元です。ユーザーが API の `Fortune.Admin` ロールを持つかどうかを判断するために、UI で `account.idTokenClaims.roles` を使用してはいけません。
+バックエンドAPIアクセストークンとReactクライアントIDトークンの用途は異なります。APIトークンはバックエンドAPIのスコープとロールの情報源です。ユーザーがAPIの`Fortune.Admin`ロールを持っているかどうかをUIで判断するために、`account.idTokenClaims.roles`を使用してはいけません。
 
-管理者ユーザーのバックエンド API 用アクセストークンには、次と同等のクレームが含まれます。
+管理者ユーザーのバックエンドAPIアクセストークンには、次と同等のクレームが含まれます。
 
 ```json
 {
@@ -486,84 +496,77 @@ Authorization: Bearer <access-token>
 }
 ```
 
-管理者ではないユーザーのトークンには、`Fortune.Admin` がなくても `access_as_user` が含まれる場合があります。
+管理者ではないユーザーのトークンには、`Fortune.Admin`なしで`access_as_user`が含まれる場合があります。
 
-### Spring Security JWT 認証
+### Spring SecurityによるJWT認証
 
-Spring Boot アプリケーションは、OAuth 2.0 Resource Server として動作します。Spring Security は Bearer JWT アクセストークンを独立して検証し、エンドポイントの認可が評価される前に認証済みプリンシパルを確立します。
+Spring BootアプリケーションはOAuth 2.0 Resource Serverとして動作します。Spring Securityは、エンドポイントの認可が評価される前に、Bearer JWTアクセストークンを独立して検証し、認証済みプリンシパルを確立します。
 
-JWT の Authority 変換にはアクセストークンの `roles` 値が含まれるため、バックエンドは `Fortune.Admin` アプリロールを強制できます。無効、期限切れ、欠落、不正な発行元、または対象（audience）が誤っているアクセストークンを、認証済みの API 呼び出しとして扱ってはいけません。
+JWTの権限変換にはアクセストークンの`roles`値が含まれるため、バックエンドで`Fortune.Admin`アプリロールを適用できます。無効、期限切れ、欠落、発行者が不正、または対象ユーザーが不正なアクセストークンを、認証済みAPI呼び出しとして扱ってはいけません。
 
-既存の Azure Static Web Apps 認証アーキテクチャとプロビジョニング手順については、以下を参照してください。
-
-```text
-docs/authentication.md
-docs/authentication-setup.md
-```
-
-バックエンド API のトークンフローと Step 5 の実装については、以下を参照してください。
+バックエンドAPIのトークンフローとStep 5の実装については、以下を参照してください。
 
 ```text
 docs/step05-entra-id-authentication-authorization.md
 ```
 
-### 認可の前に認証を実装する
+### 認可より先に認証
 
-認証と認可は段階的に実装および検証します。
+認証と認可は、段階的に実装および検証します。
 
-このプロジェクトでは、まず次の項目を確立してテストします。
+プロジェクトでは、まず以下を確立してテストします。
 
-1. Microsoft Entra ID へのサインイン。
-2. MSAL によるバックエンド用アクセストークンの取得。
-3. Bearer トークンを使用した API 呼び出し。
-4. Spring Security による JWT 検証。
-5. 一般 API への認証済みアクセス。
+1. Microsoft Entra IDへのサインイン。
+2. MSALによるバックエンドアクセストークンの取得。
+3. Bearerトークンを使用したAPI呼び出し。
+4. Spring SecurityによるJWT検証。
+5. 一般APIへの認証済みアクセス。
 
-この基盤が動作し、テストでカバーされた後にのみ、ロールベースの認可を追加します。
+この基準が機能し、テストでカバーされた後にのみ、ロールベースの認可を追加します。
 
-1. `Fortune.Admin` アプリロールの定義と割り当て。
-2. `/api/admin/**` に対するバックエンド認可。
-3. ロールを持たない認証済みユーザーに対する `403 Forbidden` の検証。
-4. ロールに基づく Fortune 管理 UI の表示制御。
+1. `Fortune.Admin`アプリロールの定義と割り当て。
+2. `/api/admin/**`に対するバックエンド認可。
+3. ロールを持たない認証済みユーザーに対する`403 Forbidden`の検証。
+4. ロールに基づくFortune管理UIの表示制御。
 
-この分離により、実装時とトラブルシューティング時に、認証の失敗と認可の失敗が混在することを防ぎます。
+この分離により、実装およびトラブルシューティング中に、認証エラーと認可エラーが混在することを防ぎます。
 
 ---
 
 ## 認可
 
-認証は、リクエストに有効なバックエンド API 用アクセストークンが含まれているかどうかを判断します。認可はその後、認証されたユーザーが何を実行できるかを決定します。
+認証では、リクエストに有効なバックエンドAPIアクセストークンが含まれているかどうかを判断します。その後、認可によって、認証済みユーザーが実行できる操作を決定します。
 
 現在の認可モデルは以下のとおりです。
 
-| 操作 | `Fortune.Admin` を持たない認証済みユーザー | `Fortune.Admin` を持つユーザー |
+| 操作 | `Fortune.Admin`を持たない認証済みユーザー | `Fortune.Admin`を持つユーザー |
 |---|---:|---:|
-| Fortune を取得 | 許可 | 許可 |
-| Fortune 管理を表示 | 非表示 | 表示 |
-| 管理対象 Fortune の一覧を表示 | 禁止 | 許可 |
-| Fortune を追加 | 禁止 | 許可 |
-| Fortune を削除 | 禁止 | 許可 |
+| Fortuneを取得 | 許可 | 許可 |
+| Fortune管理を表示 | 非表示 | 表示 |
+| 管理対象のFortuneを一覧表示 | 禁止 | 許可 |
+| Fortuneを追加 | 禁止 | 許可 |
+| Fortuneを削除 | 禁止 | 許可 |
 
-Spring Security は、以下に対して `Fortune.Admin` を要求します。
+Spring Securityでは、以下に対して`Fortune.Admin`が必要です。
 
 ```text
 /api/admin/**
 ```
 
-バックエンドがセキュリティ境界です。`Fortune.Admin` を持たない認証済みユーザーが管理エンドポイントを呼び出すと、`403 Forbidden` が返されます。
+バックエンドがセキュリティ境界です。`Fortune.Admin`を持たない認証済みユーザーが管理エンドポイントを呼び出すと、`403 Forbidden`が返されます。
 
-React フロントエンドはバックエンド API 用アクセストークンを取得し、その `roles` クレームを読み取ります。トークンに `Fortune.Admin` が含まれる場合にのみ、Fortune 管理をレンダリングします。
+ReactフロントエンドはバックエンドAPIアクセストークンを取得し、その`roles`クレームを読み取ります。Fortune管理は、トークンに`Fortune.Admin`が含まれている場合にのみ表示されます。
 
-フロントエンドでのトークン解析はユーザーエクスペリエンスの制御だけを目的とし、トークンの署名は検証しないため、セキュリティ境界として使用してはいけません。管理 UI を非表示にすることは、バックエンドの認可に代わるものではありません。
+フロントエンドでのトークン解析はユーザーエクスペリエンスの制御にのみ使用されます。トークンの署名は検証されないため、セキュリティ境界として使用してはいけません。管理UIを非表示にしても、バックエンドでの認可の代わりにはなりません。
 
 ---
 ## データアクセス
 
-Azure SQL Database は永続的な Fortune データを保存します。
+Azure SQL Databaseには永続的なFortuneデータが保存されます。
 
-デプロイされたバックエンドは、ユーザー割り当てマネージド ID を介して Azure SQL にアクセスします。
+デプロイされたバックエンドは、ユーザー割り当てマネージドIDを介してAzure SQLにアクセスします。
 
-現在、アプリケーションは `dbo.fortunes` に対して、以下のオブジェクトレベル権限をマネージド ID に付与します。
+現在、アプリケーションは`dbo.fortunes`に対して、マネージドIDに以下のオブジェクトレベルの権限を付与します。
 
 ```text
 SELECT
@@ -571,7 +574,7 @@ INSERT
 DELETE
 ```
 
-現在の Fortune 機能では、広範な固定データベースロールのメンバーシップは必要ありません。
+現在のFortune機能では、広範な固定データベースロールへのメンバーシップは必要ありません。
 
 アプリケーションは以下を提供します。
 
@@ -583,7 +586,7 @@ POST   /api/admin/fortunes           Fortune.Admin
 DELETE /api/admin/fortunes/{id}      Fortune.Admin
 ```
 
-Azure SQL インフラストラクチャ、Spring プロファイル、リポジトリ設計、データベース権限、Fortune 管理、Step 4 の検証の詳細については、以下を参照してください。
+Azure SQLインフラストラクチャ、Springプロファイル、リポジトリ設計、データベース権限、Fortune管理、およびStep 4の検証の詳細については、以下を参照してください。
 
 ```text
 docs/step04-data-access.md
@@ -599,68 +602,89 @@ docs/step04-data-access.md
 
 バックエンドとフロントエンドの自動テストは、デプロイ済みの完全なユーザーフローを必要とせずに、アプリケーションとコンポーネントの動作を検証します。
 
-Step 5 のセキュリティテスト範囲には、以下が含まれます。
+Step 5のセキュリティテストは以下を対象としています。
 
-- Fortune 管理の GET、POST、DELETE エンドポイントに対するバックエンドセキュリティテスト。
+- Fortune管理のGET、POST、DELETEエンドポイントに対するバックエンドセキュリティテスト。
 - 未認証の管理リクエストの拒否。
-- `Fortune.Admin` を持たない認証済みユーザーに対する `403 Forbidden`。
-- `Fortune.Admin` が存在する場合の管理リクエストの成功。
-- React クライアントの ID トークンではなく、テスト用バックエンド API アクセストークンから UI の認可を導出するフロントエンドテスト。
-- アクセストークンに `Fortune.Admin` が含まれる場合に Fortune 管理が表示されること。
-- トークン取得の完了後、ロールがない場合に Fortune 管理が表示されないこと。
-- 既存の Fortune 取得における成功時とエラー時の動作。
+- `Fortune.Admin`を持たない認証済みユーザーに対する`403 Forbidden`。
+- `Fortune.Admin`が存在する場合の管理リクエストの成功。
+- ReactクライアントIDトークンではなく、テスト用バックエンドAPIアクセストークンからUI認可を導出するフロントエンドテスト。
+- アクセストークンに`Fortune.Admin`が含まれる場合のFortune管理の表示。
+- トークン取得完了後、ロールが存在しない場合のFortune管理の非表示。
+- 既存のFortune取得における成功時とエラー時の動作。
 
-フロントエンドのテストスイートには、4 件の `App.test.tsx` テストと 2 件の `FortuneManagement.test.tsx` テストが含まれています。完了した検証では、以下の結果が報告されました。
+フロントエンドのテストスイートには、4つの`App.test.tsx`テストと2つの`FortuneManagement.test.tsx`テストが含まれています。完了した検証では、以下の結果が報告されています。
 
 ```text
 npm test       6 tests passed
 npm run build  succeeded
 ```
 
-本番ビルドでは、500 kB を超えるチャンクに関するブロックされないバンドルサイズ警告が出力されました。この警告は、認証および認可の動作とは別のものです。
+本番ビルドでは、500 kBを超えるチャンクに対する、処理を妨げないバンドルサイズの警告が出力されました。この警告は、認証および認可の動作とは別のものです。
+
+### デプロイ検証
+
+CI/CDデプロイ検証では、現在のGitコミットからビルドされた成果物が、実際にデプロイされた成果物であることを確認します。
+
+バックエンドの検証では、GitコミットSHAと、Azure Container AppsにデプロイされたOCIイメージタグを比較します。
+
+フロントエンドの検証では、GitコミットSHAと、以下を介して公開されたバージョンを比較します。
+
+```text
+/version.json
+```
+
+これらの確認はGitHub Actionsによって自動化されており、アプリケーションのE2Eシナリオ検証とは異なります。
+
+Step 6のCI/CDおよびデプロイ検証の詳細は、以下に記載されています。
+
+```text
+docs/step06-cicd.md
+docs/step06-cicd-ja.md
+```
 
 ### ローカル機能検証
 
 ローカル機能検証では、開発中のフロントエンドとバックエンドの動作を確認します。
 
-完了したロールベース UI の確認では、バックエンド API 用アクセストークンに `Fortune.Admin` が含まれるユーザーには Fortune 管理が表示され、そのロールを持たないユーザーには表示されないことを確認しました。
+完了したロールベースUIの確認では、バックエンドAPIアクセストークンに`Fortune.Admin`が含まれるユーザーにはFortune管理が表示され、このロールを持たないユーザーには表示されないことを確認しました。
 
 ### デプロイ済みバックエンドの機能検証
 
-Azure Container Apps に対する直接的な API 検証では、デプロイ済みバックエンド、トークン検証、認可、Azure SQL アクセスが正しく動作することを確認します。
+Azure Container Appsに対する直接のAPI検証では、デプロイ済みバックエンド、トークン検証、認可、およびAzure SQLアクセスが正しく動作することを確認します。
 
-Fortune 管理の GET、POST、DELETE などの個別 API 操作は、デプロイ済みバックエンドの機能検証として扱います。
+Fortune管理のGET、POST、DELETEなどの個別API操作は、デプロイ済みバックエンドの機能検証として扱います。
 
-これらは、アプリケーション全体の E2E 検証としては扱いません。
+これらは、アプリケーション全体のE2E検証としては扱いません。
 
 ### エンドツーエンドのシナリオ検証
 
-E2E 検証は、ユーザーシナリオに基づいています。
+E2E検証はユーザーシナリオに基づきます。
 
-Fortune 管理では、Azure Static Web Apps がユーザーのエントリーポイントです。
+Fortune管理では、Azure Static Web Appsがユーザーのエントリポイントです。
 
 検証済みのシナリオには、以下が含まれます。
 
 1. デプロイ済みアプリケーションにサインインする。
-2. バックエンド API 用アクセストークンを取得する。
-3. 認証済み API を介して Fortune を取得する。
-4. `Fortune.Admin` の場合にのみ Fortune 管理が表示されることを確認する。
-5. 管理者として既存の Fortune レコードを表示する。
-6. React UI から Fortune を追加する。
-7. Fortune が管理一覧に表示されることを確認する。
-8. 更新された Fortune データを使用してアプリケーションを操作する。
-9. 追加した Fortune を削除する。
-10. Fortune が管理一覧から消えることを確認する。
+2. バックエンドAPIアクセストークンを取得する。
+3. 認証済みAPIを介してFortuneを取得する。
+4. `Fortune.Admin`を持つ場合にのみFortune管理が表示されることを確認する。
+5. 管理者として既存のFortuneレコードを表示する。
+6. React UIからFortuneを追加する。
+7. Fortuneが管理一覧に表示されることを確認する。
+8. 更新されたFortuneデータでアプリケーションを使用する。
+9. 追加したFortuneを削除する。
+10. Fortuneが管理一覧から消えることを確認する。
 
-この検証の目的は、デプロイ済みアプリケーションを介してユーザーが意図したワークフローが成功し、フロントエンドの表示制御がバックエンドの認可と一致することを確認することです。
+この検証の目的は、デプロイ済みアプリケーションを介してユーザーが意図したワークフローが成功し、フロントエンドの表示制御とバックエンドの認可が一致していることを確認することです。
 
-Step 4 のデータアクセステストと検証の詳細は、以下に記載されています。
+Step 4のデータアクセステストおよび検証の詳細は、以下に記載されています。
 
 ```text
 docs/step04-data-access.md
 ```
 
-Step 5 の認証と認可に関するテストの詳細は、以下に記載されています。
+Step 5の認証および認可テストの詳細は、以下に記載されています。
 
 ```text
 docs/step05-entra-id-authentication-authorization.md
@@ -674,19 +698,20 @@ docs/step05-entra-id-authentication-authorization.md
 
 ### ロードマップドキュメント
 
-ロードマップドキュメントでは、プロジェクトの各 Step で導入された実装と意思決定について説明します。
+ロードマップドキュメントでは、プロジェクトの特定のStepで導入された実装と判断事項について説明します。
 
-現在利用できるドキュメントは以下のとおりです。
+現在利用可能なドキュメントは以下のとおりです。
 
 ```text
 docs/step04-data-access.md
 docs/step05-entra-id-authentication-authorization.md
+docs/step06-cicd.md
+docs/step06-cicd-ja.md
 ```
 
-今後のロードマップドキュメントも、同じ命名規則に従います。
+今後のロードマップドキュメントも同じ命名規則に従います。
 
 ```text
-docs/step06-cicd.md
 docs/step07-spring-boot-diagnostics.md
 docs/step08-observability.md
 docs/step09-identity-lifecycle.md
@@ -708,7 +733,7 @@ docs/architecture.md
 docs/deployment.md
 ```
 
-Azure Static Web Apps の認証アーキテクチャと境界:
+Azure Static Web Appsの認証アーキテクチャと境界:
 
 ```text
 docs/authentication.md
@@ -720,10 +745,17 @@ docs/authentication.md
 docs/authentication-setup.md
 ```
 
-Microsoft Entra ID、React/MSAL、バックエンド用アクセストークン、Spring Security JWT 認証、ロールベース認可:
+Microsoft Entra ID、React/MSAL、バックエンドアクセストークン、Spring SecurityによるJWT認証、およびロールベースの認可:
 
 ```text
 docs/step05-entra-id-authentication-authorization.md
+```
+
+GitHub ActionsによるCI/CDとデプロイ検証:
+
+```text
+docs/step06-cicd.md
+docs/step06-cicd-ja.md
 ```
 
 既知の問題、診断、解決策:
@@ -736,56 +768,55 @@ docs/troubleshooting.md
 
 ## セキュリティに関する注意事項
 
-認証と認可は、複数のレイヤーで適用されます。
+認証と認可は複数のレイヤーで適用されます。
 
-Azure Static Web Apps は、認証済みフロントエンドのエントリーポイントを提供します。
+Azure Static Web AppsはReactフロントエンドをホストします。
 
-React アプリケーションは MSAL を使用して、`access_as_user` 委任スコープを含むバックエンド API 用アクセストークンを取得します。API リクエストは、`Authorization: Bearer` ヘッダーでトークンを送信します。
+アプリケーションユーザーの認証は、Microsoft Entra IDを使用したReact/MSALによって実行されます。
 
-Spring Boot バックエンドは、Spring Security を介して Bearer JWT アクセストークンを独立して検証します。
+Reactアプリケーションは、`access_as_user`委任スコープを含むバックエンドAPIアクセストークンを取得します。APIリクエストは、このトークンを`Authorization: Bearer`ヘッダーで送信します。
 
-以下にある管理エンドポイントには、
+Spring Bootバックエンドは、Spring Securityを介してBearer JWTアクセストークンを独立して検証します。
+
+以下の管理エンドポイントには、
 
 ```text
 /api/admin/**
 ```
 
-`Fortune.Admin` アプリロールが必要です。
+`Fortune.Admin`アプリロールが必要です。
 
-React フロントエンドは `Fortune.Admin` を持たないユーザーに対して Fortune 管理を非表示にしますが、フロントエンドの表示制御はセキュリティ境界ではありません。バックエンドは、ロールを持たない認証済みユーザーによる管理リクエストを、`403 Forbidden` で独立して拒否します。
+Reactフロントエンドは、`Fortune.Admin`を持たないユーザーに対してFortune管理を非表示にしますが、フロントエンドの表示制御はセキュリティ境界ではありません。バックエンドは、このロールを持たない認証済みユーザーからの管理リクエストを独立して拒否し、`403 Forbidden`を返します。
 
-フロントエンドは、React クライアントの ID トークンではなく、バックエンド API 用アクセストークンからロールを読み取ります。フロントエンドでのクレームのデコードでは署名検証を行わず、表示制御のみに使用します。
+フロントエンドは、ReactクライアントIDトークンではなく、バックエンドAPIアクセストークンからロールを読み取ります。フロントエンドでのクレームのデコードでは署名を検証せず、表示の制御にのみ使用します。
 
-バックエンドは、Azure SQL へのアクセスにユーザー割り当てマネージド ID を使用し、アプリケーションソースにデータベースパスワードを保存しません。
+バックエンドはAzure SQLへのアクセスにユーザー割り当てマネージドIDを使用し、アプリケーションのソースにデータベースパスワードを保存しません。
 
-データベース ID は、最小権限かつオブジェクトレベルの権限モデルに従います。
+データベースIDは、最小権限に基づくオブジェクトレベルのアクセス許可モデルに従います。
 
 以下をコミットしないでください。
 
 - クライアントシークレット
-- Azure Static Web Apps のデプロイトークン
+- Azure Static Web Appsのデプロイトークン
 - アクセストークン
 - リフレッシュトークン
-- ID トークン
-- 実際の `/.auth/me` レスポンス
-- 実在するユーザー ID 情報
-- Azure 資格情報
-- SQL 資格情報
+- IDトークン
+- 実在するユーザーのID情報
+- Azure資格情報
+- SQL資格情報
 - 秘密証明書または秘密鍵
 - 環境固有の値を含む生成ファイル
 - 資格情報を含むローカル環境ファイル
 
-適切な機密情報の保存場所には、以下があります。
+シークレットの保存に適した場所には、以下があります。
 
-- Azure Static Web Apps のアプリケーション設定
-- GitHub Actions シークレット
+- GitHub Actions secrets
 - Azure Key Vault
 - ローカルユーザーの環境変数
 
 認証固有のセキュリティ境界については、以下を参照してください。
 
 ```text
-docs/authentication.md
 docs/step05-entra-id-authentication-authorization.md
 ```
 
@@ -793,58 +824,46 @@ docs/step05-entra-id-authentication-authorization.md
 
 ## トラブルシューティング
 
-既知の問題、診断手順、検証済みの解決策は、以下に記載されています。
+既知の問題、診断手順、および検証済みの解決策は、以下に記載されています。
 
 ```text
 docs/troubleshooting.md
 ```
 
-以下のトピックが含まれます。
+トピックには以下が含まれます。
 
-- Azure CLI のテナントおよびサブスクリプションコンテキスト
-- Bicep の診断
-- Azure SQL 認証
-- マネージド ID のデータベース権限
-- コンテナーランタイムの接続性
-- Buildpacks のアーキテクチャ不一致
-- Azure Container Apps のログ取得
-- Vite のビルド時環境変数
-- Vite プレビューの CORS
-- Azure Static Web Apps CLI の呼び出し
-- Vitest のワーカープール動作
+- Azure CLIのテナントおよびサブスクリプションコンテキスト
+- Bicepの診断
+- Azure SQL認証
+- マネージドIDのデータベース権限
+- コンテナーランタイムの接続
+- Buildpacksのアーキテクチャ不一致
+- Azure Container Appsのログ取得
+- Viteのビルド時環境変数
+- ViteプレビューのCORS
+- Azure Static Web Apps CLIの呼び出し
+- Vitestワーカープールの動作
 - 認証およびリダイレクトの失敗
-- MSAL アカウントおよびサイレントトークン取得の失敗
-- バックエンド API トークンの対象（audience）、発行者、有効期限、署名に関する失敗
-- `access_as_user` スコープまたは `Fortune.Admin` ロールクレームの欠落
-- `401 Unauthorized` の認証失敗と `403 Forbidden` の認可失敗の区別
-- ID トークンとバックエンド API 用アクセストークンのクレーム選択
+- MSALアカウントおよびサイレントトークン取得の失敗
+- バックエンドAPIトークンの対象ユーザー、発行者、有効期限、署名の失敗
+- `access_as_user`スコープまたは`Fortune.Admin`ロールクレームの欠落
+- `401 Unauthorized`認証エラーと`403 Forbidden`認可エラーの区別
+- IDトークンとバックエンドAPIアクセストークンのクレーム選択
 
 ---
 
-## 次のステップ
+## 次のStep
 
-### Step 6: CI/CD
+### Step 7: Spring Boot診断
 
-次の Step では、CI/CD 自動化を導入します。
+次のStepでは、Spring Boot Actuator、BootUI、BootUI MCPを使用したローカル診断機能を導入します。これには、MCPクライアントを使用したAI支援による調査が含まれます。
 
-以下の自動化を目標とします。
+その後のロードマップには、以下が含まれます。
 
-- 認証および認可テストを含むバックエンドテスト
-- アクセストークンベースのロール表示テストを含むフロントエンドテスト
-- バックエンド OCI イメージの作成
-- インフラストラクチャのデプロイ
-- データベースデプロイの検証
-- バックエンドのデプロイ
-- フロントエンドのビルドとデプロイ
-- デプロイの検証
-
-以降のロードマップには、以下が含まれます。
-
-- Step 7: Spring Boot Diagnostics（Spring Boot Actuator、BootUI、BootUI MCP を使用した AI 支援によるローカル診断）
-- Step 8: Observability（OpenTelemetry と Apache SkyWalking による HTTP、Spring Boot、Azure SQL を横断するトレーシング）
-- Step 9: ユーザーの招待とオンボーディング、セルフサービスサインアップ、アクセスレビューを含む ID ライフサイクル管理
-- Step 10: Azure Static Web Apps を Azure Container Apps に置き換える代替アーキテクチャとしての Buildpacks ベースのフロントエンドコンテナー化
-- Step 11: AI / RAG（Azure OpenAI、RAG、AI 処理の OpenTelemetry トレーシング）
+- Step 8: HTTP、Spring Boot、Azure SQL間のトレースにOpenTelemetryとApache SkyWalkingを使用する可観測性
+- Step 9: ユーザーの招待とオンボーディング、セルフサービスサインアップ、アクセスレビューを含むIDライフサイクル管理
+- Step 10: Azure Static Web AppsをAzure Container Appsに置き換える代替アーキテクチャとしての、Buildpacksベースのフロントエンドコンテナー化
+- Step 11: Azure OpenAI、RAG、およびAI処理のOpenTelemetryトレースを使用したAI / RAG
 
 ---
 
@@ -852,6 +871,6 @@ docs/troubleshooting.md
 
 ライセンスはまだ宣言されていません。
 
-ライセンスが追加されるまでは、標準的な著作権規則が適用されます。
+ライセンスが追加されるまでは、標準の著作権規則が適用されます。
 
-再利用やコントリビューションを想定している場合は、公開または外部からのコントリビューションを受け入れる前に、適切なオープンソースライセンスを追加してください。
+再利用やコントリビューションを想定する場合は、公開または外部からのコントリビューションを受け付ける前に、適切なオープンソースライセンスを追加してください。

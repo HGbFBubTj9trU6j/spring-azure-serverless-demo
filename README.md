@@ -50,6 +50,9 @@ The application currently supports:
 - Script-based build, deployment, and verification
 - CI/CD with GitHub Actions
 - GitHub OIDC-based Azure authentication
+- Resource-scoped Azure RBAC for the GitHub Actions managed identity
+- Environment-specific non-secret configuration through `config/dev.psd1`
+- Dynamic resolution of Azure Container Registry and Azure Static Web Apps deployment targets
 - Automated backend and frontend deployment verification
 
 ---
@@ -76,6 +79,9 @@ The application currently supports:
   - [x] Backend OCI image build and ACR push
   - [x] Azure Container Apps deployment
   - [x] Azure Static Web Apps deployment
+  - [x] GitHub OIDC authentication with a User Assigned Managed Identity
+  - [x] Resource-scoped Azure RBAC for ACR, Container Apps, and Static Web Apps
+  - [x] Environment-specific CI/CD configuration without hardcoded ACR names or Static Web Apps URLs
   - [x] Backend and frontend deployment verification
 
 Step 4 implementation details are documented in:
@@ -94,7 +100,7 @@ Step 6 implementation details are documented in:
 
 ```text
 docs/step06-cicd.md
-docs/step06-cicd-ja.md
+docs/step06-cicd.ja.md
 ```
 
 ### Planned
@@ -223,6 +229,16 @@ The default development environment is defined in:
 config/dev.psd1
 ```
 
+This file is the source of truth for environment-specific, non-secret resource names used by the deployment scripts, including the resource group, Azure Container Registry, Container Apps environment, managed identities, Container App, Static Web App, and Azure SQL resources.
+
+The GitHub Actions managed identity is configured with:
+
+```powershell
+GithubActionsIdentityName = "spring-azure-serverless-demo-dev-github-id"
+```
+
+The GitHub Actions workflow also reads deployment configuration from `config/dev.psd1`. It resolves the Azure Container Registry login server from `AcrName` and retrieves the Azure Static Web Apps hostname from Azure by using `StaticWebAppName` and `ResourceGroup`. Environment-specific ACR names and Static Web Apps URLs are therefore not hardcoded in the workflow.
+
 Secret values must not be stored in this file.
 
 ---
@@ -320,6 +336,9 @@ Build the backend OCI image
 Deploy the backend to Azure Container Apps
         │
         ▼
+Configure GitHub Actions access to the Container App
+        │
+        ▼
 Configure Microsoft Entra ID app registrations, API scope, and app role
         │
         ▼
@@ -341,6 +360,7 @@ scripts/deploy-database.ps1
 scripts/verify-database.ps1
 scripts/build-backend.ps1
 scripts/deploy-backend.ps1
+scripts/setup-github-actions.ps1
 scripts/build-frontend.ps1
 scripts/deploy-frontend.ps1
 scripts/verify-backend-deployment.ps1
@@ -355,6 +375,27 @@ For the complete deployment order, prerequisites, tenant switching, build settin
 ```text
 docs/deployment.md
 ```
+
+### GitHub Actions Azure access
+
+`deploy-infra.ps1` provisions the GitHub Actions User Assigned Managed Identity and its federated identity credential. The infrastructure deployment also assigns the permissions that can be configured when the shared resources are created:
+
+| Target resource | Azure role | Purpose |
+|---|---|---|
+| Azure Container Registry | `AcrPush` | Push the backend OCI image |
+| Azure Static Web Apps | `Reader` | Resolve the deployed Static Web Apps hostname for frontend verification |
+
+The Container App is created during the initial backend deployment. After that deployment, run:
+
+```powershell
+./scripts/setup-github-actions.ps1
+```
+
+This script assigns `Container Apps Contributor` to the GitHub Actions managed identity at the individual Container App scope. GitHub Actions uses this permission to update the backend image and inspect the active revision during deployment verification.
+
+The three role assignments are scoped to the individual ACR, Container App, and Static Web App resources rather than to the entire resource group.
+
+GitHub Actions itself deploys application changes to the existing Azure resources. It is not responsible for provisioning the complete infrastructure.
 
 ---
 
@@ -438,6 +479,8 @@ The frontend deployment script invokes Azure Static Web Apps CLI through:
 ```text
 npx @azure/static-web-apps-cli
 ```
+
+In GitHub Actions, the ACR name is loaded from `config/dev.psd1`. Frontend deployment verification uses `az staticwebapp show` to retrieve the current `defaultHostname` instead of relying on a hardcoded Static Web Apps URL.
 
 Detailed build and deployment instructions are maintained in:
 
@@ -637,13 +680,15 @@ Frontend verification compares the Git commit SHA with the version published thr
 /version.json
 ```
 
+Before frontend verification, the workflow resolves the Static Web Apps `defaultHostname` through Azure CLI using the resource name and resource group from `config/dev.psd1`.
+
 These checks are automated by GitHub Actions and are distinct from application E2E scenario verification.
 
 Step 6 CI/CD and deployment verification details are documented in:
 
 ```text
 docs/step06-cicd.md
-docs/step06-cicd-ja.md
+docs/step06-cicd.ja.md
 ```
 
 ### Local Feature Verification
@@ -709,7 +754,7 @@ Currently available:
 docs/step04-data-access.md
 docs/step05-entra-id-authentication-authorization.md
 docs/step06-cicd.md
-docs/step06-cicd-ja.md
+docs/step06-cicd.ja.md
 ```
 
 Future roadmap documents will follow the same naming convention:
@@ -758,7 +803,7 @@ GitHub Actions CI/CD and deployment verification:
 
 ```text
 docs/step06-cicd.md
-docs/step06-cicd-ja.md
+docs/step06-cicd.ja.md
 ```
 
 Known issues, diagnostics, and resolutions:

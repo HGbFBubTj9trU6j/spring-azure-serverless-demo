@@ -40,19 +40,22 @@ Provision shared Azure infrastructure
 Deploy Azure SQL schema and security
         │
         ▼
+Configure Microsoft Entra application registrations and authorization
+        │
+        ▼
 Build backend OCI image
         │
         ▼
-Push image and deploy Azure Container App
+Push image and perform the initial Azure Container App deployment
+        │
+        ▼
+Configure GitHub Actions access to the Container App
         │
         ▼
 Build React frontend
         │
         ▼
 Deploy frontend to Azure Static Web Apps
-        │
-        ▼
-Configure Microsoft Entra ID authentication
         │
         ▼
 Verify the deployed application
@@ -79,19 +82,21 @@ Azure Subscription Tenant
   ├── Azure Container Registry
   ├── Azure Container Apps Environment
   ├── Azure Container App
-  ├── User Assigned Managed Identity
+  ├── Container App runtime Managed Identity
+  ├── GitHub Actions Managed Identity and federated credential
   ├── Azure Static Web Apps
   └── Azure SQL resources
 
 Authentication Tenant
   │
-  ├── App Registration
-  └── Service Principal
+  ├── React SPA App Registration
+  ├── Backend API App Registration
+  └── Backend API Service Principal
 ```
 
-The Azure subscription tenant contains the application infrastructure.
+The Azure subscription tenant contains the application infrastructure and deployment identities.
 
-The authentication tenant contains the identity resources used by Azure Static Web Apps authentication.
+The authentication tenant contains the identities used by React/MSAL and the Spring Security resource server. Azure Static Web Apps provides static hosting only; it is not the user-authentication boundary.
 
 Always verify the active Azure CLI tenant and subscription before running tenant-specific scripts.
 
@@ -168,12 +173,15 @@ The developer must prepare the following environment variables when applicable:
 
 ```text
 ENTRA_TENANT_ID
+VITE_ENTRA_TENANT_ID
+VITE_ENTRA_CLIENT_ID
+VITE_API_SCOPE
 SWA_DEPLOYMENT_TOKEN
 ```
 
 ### ENTRA_TENANT_ID
 
-`ENTRA_TENANT_ID` is used when generating the Azure Static Web Apps authentication configuration during the frontend build.
+`ENTRA_TENANT_ID` identifies the authentication tenant whose access tokens the Spring Security resource server accepts. It is a non-secret environment value required for backend deployment.
 
 Verify that it is defined without displaying its value:
 
@@ -200,6 +208,18 @@ else {
     Write-Host "SWA_DEPLOYMENT_TOKEN is not configured."
 }
 ```
+
+### React/MSAL Build Values
+
+The production frontend build requires the following non-secret identity values:
+
+```text
+VITE_ENTRA_TENANT_ID
+VITE_ENTRA_CLIENT_ID
+VITE_API_SCOPE
+```
+
+They identify the authentication tenant, React SPA App Registration, and delegated backend API scope. Configure them from the values produced by `scripts/41-deploy-identity.ps1`. Do not substitute an application client secret; the React SPA is a public client and uses authorization code flow with PKCE.
 
 ### Build-generated Vite Values
 
@@ -260,6 +280,7 @@ It contains non-secret environment-specific values such as:
 - Azure Container Registry name
 - Azure Container Apps Environment name
 - Azure Container App name
+- GitHub Actions Managed Identity name
 - Azure Static Web Apps name
 - Azure SQL server name
 - Azure SQL database name
@@ -311,9 +332,11 @@ These resources include:
 - User Assigned Managed Identity
 - Azure Static Web Apps
 - Azure SQL infrastructure
-- Required Azure role assignments
+- Required Azure role assignments that can be created before the Container App exists
 
-The Azure Container App itself is deployed later after the backend OCI image is available.
+The shared-infrastructure deployment creates the GitHub Actions Managed Identity and its federated identity credential. It assigns resource-scoped access for Azure Container Registry (`AcrPush`) and Azure Static Web Apps (`Reader`).
+
+The Azure Container App itself is deployed later after the backend OCI image is available. Its `Container Apps Contributor` assignment is therefore applied afterward by `scripts/setup-github-actions.ps1`.
 
 ### Verify Shared Infrastructure
 
@@ -394,7 +417,62 @@ docs/step04-data-access.md
 
 ---
 
-## Step 4: Build the Backend OCI Image
+## Step 4: Configure Microsoft Entra ID Authentication and Authorization
+
+While signed in to the Azure subscription tenant, obtain the production Static Web Apps hostname using the names from `config/dev.psd1`:
+
+```powershell
+$swaHostname = az staticwebapp show `
+  --name spring-azure-serverless-demo-dev-swa `
+  --resource-group spring-azure-serverless-demo-rg `
+  --query defaultHostname `
+  --output tsv
+```
+
+Switch to the authentication tenant:
+
+```powershell
+az login `
+  --tenant <AUTHENTICATION_TENANT_ID> `
+  --allow-no-subscriptions
+```
+
+Create or update the backend API and React SPA App Registrations:
+
+```powershell
+.\scripts\41-deploy-identity.ps1 `
+  -StaticWebAppHostname $swaHostname
+```
+
+The script configures:
+
+- The backend API Application ID URI.
+- The `access_as_user` delegated scope.
+- The `Fortune.Admin` app role.
+- The backend API Service Principal.
+- The React SPA platform and production/local redirect URIs.
+- The SPA's delegated permission to the backend API.
+
+No client secret is created for the React SPA. It is a public client and authenticates with MSAL by using authorization code flow with PKCE.
+
+Return to the Azure subscription tenant and select the deployment subscription before continuing. Then set the environment values required by backend deployment and the frontend build:
+
+```text
+ENTRA_TENANT_ID
+VITE_ENTRA_TENANT_ID
+VITE_ENTRA_CLIENT_ID
+VITE_API_SCOPE
+```
+
+For the full identity procedure, consent requirements, app-role assignment, and verification steps, follow:
+
+```text
+docs/authentication-setup.md
+```
+
+---
+
+## Step 5: Build the Backend OCI Image
 
 Build the backend image:
 
@@ -477,7 +555,7 @@ linux/amd64
 
 ---
 
-## Step 5: Deploy the Backend
+## Step 6: Deploy the Backend
 
 Deploy the backend image to Azure Container Apps:
 
@@ -509,7 +587,7 @@ The deployment script:
 7. Deploys or updates the Azure Container App through Bicep.
 8. Displays the deployed image and Container App endpoint.
 
-The same deployment path is used for both initial creation and later backend updates.
+This Bicep-backed path is used for the initial Container App deployment and for intentional infrastructure reconciliation. GitHub Actions uses `scripts/deploy-backend-image.ps1` instead, which updates only the image on the existing Container App.
 
 ### Verify the Deployed Image
 
@@ -541,31 +619,55 @@ $fqdn = az containerapp show `
   --output tsv
 ```
 
-Verify the random Fortune endpoint:
+Confirm that a protected API rejects an unauthenticated request:
 
 ```powershell
-curl.exe "https://$fqdn/api/fortune"
+curl.exe -i "https://$fqdn/api/fortune"
 ```
 
-Verify the Fortune Management list endpoint:
+The expected response is `401 Unauthorized`. Functional API verification requires a valid access token with the `access_as_user` delegated scope. Administrative endpoints additionally require the `Fortune.Admin` app role.
 
-```powershell
-curl.exe "https://$fqdn/api/admin/fortunes"
-```
-
-Direct API verification confirms deployed backend functionality.
-
-It is treated as deployed backend feature verification rather than application E2E verification.
+Use the deployed React/MSAL user flow for normal end-to-end verification. Do not weaken backend authorization or copy real access tokens into documentation or scripts merely to make a direct request succeed.
 
 ---
 
-## Step 6: Build the Frontend
+## Step 7: Configure GitHub Actions Deployment Access
 
-Before building the frontend, verify that `ENTRA_TENANT_ID` is configured.
+After the initial Container App exists, configure the remaining resource-scoped role assignment:
 
 ```powershell
-if (-not $env:ENTRA_TENANT_ID) {
-    throw "ENTRA_TENANT_ID is not configured."
+.\scripts\setup-github-actions.ps1
+```
+
+The script loads the selected environment configuration and grants the GitHub Actions Managed Identity `Container Apps Contributor` on the target Container App.
+
+The complete CI/CD authorization model is:
+
+| Resource | Role | Provisioning point |
+|---|---|---|
+| Azure Container Registry | `AcrPush` | Shared infrastructure deployment |
+| Azure Static Web App | `Reader` | Shared infrastructure deployment |
+| Azure Container App | `Container Apps Contributor` | `setup-github-actions.ps1` after initial backend deployment |
+
+The GitHub Actions identity is separate from the Container App runtime identity. It must not receive Azure SQL permissions.
+
+---
+
+## Step 8: Build the Frontend
+
+Verify the React/MSAL build values before building:
+
+```powershell
+$required = @(
+    "VITE_ENTRA_TENANT_ID",
+    "VITE_ENTRA_CLIENT_ID",
+    "VITE_API_SCOPE"
+)
+
+foreach ($name in $required) {
+    if (-not [System.Environment]::GetEnvironmentVariable($name)) {
+        throw "$name is not configured."
+    }
 }
 ```
 
@@ -580,10 +682,10 @@ The frontend build script:
 1. Loads the selected environment configuration.
 2. Retrieves the deployed Container App FQDN.
 3. Sets `VITE_API_BASE_URL`.
-4. Determines the current Git commit.
-5. Detects whether the working tree is dirty.
-6. Sets `VITE_BUILD_VERSION`.
-7. Generates the Azure Static Web Apps authentication configuration.
+4. Uses the configured React/MSAL tenant, client, and API scope values.
+5. Determines the current Git commit.
+6. Detects whether the working tree is dirty.
+7. Sets `VITE_BUILD_VERSION` and writes `version.json`.
 8. Runs the Vite production build.
 
 The generated frontend is written to:
@@ -592,23 +694,9 @@ The generated frontend is written to:
 frontend/dist
 ```
 
-The generated Azure Static Web Apps configuration is written to:
-
-```text
-frontend/dist/staticwebapp.config.json
-```
-
-Do not manually modify files under:
-
-```text
-frontend/dist
-```
-
-They are generated build artifacts.
+Do not manually modify or commit generated files under `frontend/dist`.
 
 ### Verify the Embedded API URL
-
-The generated JavaScript can be inspected to verify the embedded API target.
 
 ```powershell
 Select-String `
@@ -616,19 +704,13 @@ Select-String `
   -Pattern "localhost:8080","azurecontainerapps.io"
 ```
 
-For an Azure deployment build, the generated artifacts should contain the deployed Container App endpoint.
+For an Azure deployment build, the generated artifacts should contain the deployed Container App endpoint and the intended non-secret MSAL identifiers.
 
 ---
 
-## Step 7: Deploy the Frontend
+## Step 9: Deploy the Frontend
 
-Before deploying the frontend, verify that `SWA_DEPLOYMENT_TOKEN` is configured.
-
-```powershell
-if (-not $env:SWA_DEPLOYMENT_TOKEN) {
-    throw "SWA_DEPLOYMENT_TOKEN is not configured."
-}
-```
+Before deploying the frontend, verify that `SWA_DEPLOYMENT_TOKEN` is configured without displaying its value.
 
 Deploy the generated frontend:
 
@@ -636,40 +718,9 @@ Deploy the generated frontend:
 .\scripts\deploy-frontend.ps1
 ```
 
-The deployment script uses Azure Static Web Apps CLI through:
+The script uses Azure Static Web Apps CLI through `npx` and deploys `frontend/dist` explicitly to the production environment.
 
-```text
-npx @azure/static-web-apps-cli
-```
-
-The generated `frontend/dist` directory is deployed to the production environment.
-
-The equivalent deployment operation is:
-
-```powershell
-Push-Location .\frontend
-
-try {
-    npx @azure/static-web-apps-cli deploy `
-      .\dist `
-      --env production `
-      --deployment-token $env:SWA_DEPLOYMENT_TOKEN `
-      --verbose
-}
-finally {
-    Pop-Location
-}
-```
-
-The deployment explicitly targets:
-
-```text
-production
-```
-
-Omitting the production environment selection can cause the CLI to deploy to another resolved environment.
-
-### Verify Static Web Apps Environments
+Verify the production environment:
 
 ```powershell
 az staticwebapp environment list `
@@ -678,176 +729,11 @@ az staticwebapp environment list `
   --output table
 ```
 
-The production environment is represented by:
-
-```text
-default
-```
-
-After a successful production deployment, its status should indicate that it is ready.
+The production environment is represented by `default` and should report a ready state.
 
 ---
 
-## Step 8: Configure Microsoft Entra ID Authentication
-
-Authentication resources are managed in the authentication tenant.
-
-Azure Static Web Apps application settings are configured in the Azure subscription tenant.
-
-This means the active Azure CLI context must be changed during authentication setup.
-
-### Retrieve the Static Web Apps Hostname
-
-While signed in to the Azure subscription tenant:
-
-```powershell
-$swaHostname = az staticwebapp show `
-  --name spring-azure-serverless-demo-dev-swa `
-  --resource-group spring-azure-serverless-demo-rg `
-  --query defaultHostname `
-  --output tsv
-```
-
-Display the hostname:
-
-```powershell
-Write-Host $swaHostname
-```
-
-### Switch to the Authentication Tenant
-
-```powershell
-az login `
-  --tenant <AUTHENTICATION_TENANT_ID> `
-  --allow-no-subscriptions
-```
-
-Verify the active tenant:
-
-```powershell
-az account show `
-  --query tenantId `
-  --output tsv
-```
-
-### Create or Update the App Registration
-
-Run:
-
-```powershell
-.\scripts\41-deploy-identity.ps1 `
-  -StaticWebAppHostname $swaHostname
-```
-
-The script creates or updates:
-
-- App Registration
-- Service Principal
-- Redirect URI
-- ID-token configuration
-
-The Azure Static Web Apps redirect URI follows this form:
-
-```text
-https://<STATIC_WEB_APP_HOSTNAME>/.auth/login/aad/callback
-```
-
-The existing App Registration is reused when possible.
-
-### Create a Client Secret
-
-Run:
-
-```powershell
-.\scripts\42-create-client-secret.ps1
-```
-
-If a credential already exists, the script does not create another secret by default.
-
-To create an additional secret:
-
-```powershell
-.\scripts\42-create-client-secret.ps1 `
-  -CreateNew
-```
-
-Existing secret values cannot be retrieved after creation.
-
-Use a newly created secret immediately and do not write it to the repository.
-
-### Switch Back to the Azure Subscription Tenant
-
-```powershell
-az login `
-  --tenant <AZURE_SUBSCRIPTION_TENANT_ID>
-```
-
-Select the target subscription:
-
-```powershell
-az account set `
-  --subscription <AZURE_SUBSCRIPTION_ID>
-```
-
-Verify the active context:
-
-```powershell
-az account show `
-  --query "{tenantId:tenantId,subscriptionId:id,subscriptionName:name}" `
-  --output table
-```
-
-### Configure Azure Static Web Apps Authentication
-
-Store the Client ID:
-
-```powershell
-$clientId = "<APPLICATION_CLIENT_ID>"
-```
-
-Read the newly created Client Secret as a SecureString:
-
-```powershell
-$clientSecret = Read-Host `
-  "Enter the newly created Client Secret" `
-  -AsSecureString
-```
-
-Configure Azure Static Web Apps:
-
-```powershell
-.\scripts\43-configure-swa-auth.ps1 `
-  -ClientId $clientId `
-  -ClientSecret $clientSecret
-```
-
-A different environment can be selected when supported:
-
-```powershell
-.\scripts\43-configure-swa-auth.ps1 `
-  -Environment prod `
-  -ClientId $clientId `
-  -ClientSecret $clientSecret
-```
-
-The script verifies that:
-
-- The target Azure Static Web App exists.
-- The Application Client ID is configured.
-- The secret setting exists.
-
-The Client Secret is not written to a file or displayed by the script.
-
-Detailed authentication information is documented in:
-
-```text
-docs/authentication.md
-docs/authentication-setup.md
-```
-
----
-
-## Step 9: Verify the Deployed Application
+## Step 10: Verify the Deployed Application
 
 Retrieve the Azure Static Web Apps production hostname:
 
@@ -863,13 +749,15 @@ Write-Host "https://$swaHostname"
 
 Open the displayed URL in a browser.
 
-Verify authentication behavior:
+Verify authentication and authorization behavior:
 
-- Unauthenticated access starts the configured authentication flow.
-- A registered user can sign in.
-- An unregistered user is denied access.
-- The application is displayed after authentication.
-- Logout completes successfully.
+- The static React application loads before sign-in.
+- **Sign in** starts the React/MSAL authorization-code flow with PKCE.
+- A registered and permitted user can sign in.
+- The frontend acquires an API access token with `access_as_user`.
+- The backend rejects missing, invalid, or incorrectly scoped tokens.
+- Administrative operations require `Fortune.Admin` in the backend as well as in the UI.
+- Sign-out completes successfully.
 
 Verify the application:
 
@@ -903,7 +791,7 @@ docs/step04-data-access.md
 
 When only the frontend changes:
 
-1. Verify `ENTRA_TENANT_ID`.
+1. Verify `VITE_ENTRA_TENANT_ID`, `VITE_ENTRA_CLIENT_ID`, and `VITE_API_SCOPE`.
 2. Rebuild the frontend.
 3. Verify `SWA_DEPLOYMENT_TOKEN`.
 4. Deploy the generated frontend.
@@ -924,12 +812,16 @@ When only the backend changes:
 1. Run backend tests.
 2. Build the backend OCI image.
 3. Push and deploy the backend.
-4. Verify deployed backend functionality.
+4. Verify the deployed image and protected API behavior.
+
+For a manual Bicep-backed deployment:
 
 ```powershell
 .\scripts\build-backend.ps1
 .\scripts\deploy-backend.ps1
 ```
+
+In GitHub Actions, the existing Container App is updated with `scripts/deploy-backend-image.ps1`.
 
 If the backend API contract changes, rebuild and redeploy the frontend when required.
 
@@ -955,12 +847,13 @@ For a complete rebuild of the application environment, follow this order:
 ```text
 1. Deploy shared Azure infrastructure
 2. Deploy and verify the database
-3. Build the backend image
-4. Deploy the backend
-5. Build the frontend
-6. Deploy the frontend
-7. Configure or verify authentication
-8. Verify the deployed user scenario
+3. Configure or verify the Microsoft Entra App Registrations
+4. Build the backend image
+5. Perform the initial backend deployment
+6. Configure GitHub Actions access to the Container App
+7. Build the frontend
+8. Deploy the frontend
+9. Verify authentication, authorization, and the deployed user scenario
 ```
 
 The corresponding primary commands are:
@@ -973,12 +866,13 @@ The corresponding primary commands are:
 
 .\scripts\build-backend.ps1
 .\scripts\deploy-backend.ps1
+.\scripts\setup-github-actions.ps1
 
 .\scripts\build-frontend.ps1
 .\scripts\deploy-frontend.ps1
 ```
 
-Authentication scripts are executed as required for the target Azure Static Web Apps environment.
+Run `scripts/41-deploy-identity.ps1` as required for the target authentication tenant and Static Web Apps hostname. Configure consent and `Fortune.Admin` assignments according to `docs/authentication-setup.md`.
 
 ---
 

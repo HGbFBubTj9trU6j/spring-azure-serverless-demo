@@ -178,7 +178,8 @@ Their responsibilities are:
 GitHub Actions Managed Identity
     │
     ├─ Push OCI images to ACR
-    └─ Deploy Azure Container Apps
+    ├─ Deploy and verify Azure Container Apps
+    └─ Read Azure Static Web Apps resource information
 
 
 Container App Managed Identity
@@ -189,11 +190,31 @@ Container App Managed Identity
 
 Keeping these identities separate limits their responsibilities and permissions.
 
+The GitHub Actions managed identity uses resource-scoped Azure RBAC assignments:
+
+| Target resource | Role | Purpose |
+|---|---|---|
+| Azure Container Registry | `AcrPush` | Push backend OCI images |
+| Azure Container App | `Container Apps Contributor` | Update the deployed backend image and inspect revisions for verification |
+| Azure Static Web App | `Reader` | Resolve Static Web Apps resource information, including `defaultHostname` |
+
+The GitHub Actions identity and federated credential are provisioned as infrastructure. `AcrPush` and the Static Web Apps `Reader` assignment are integrated with the shared infrastructure deployment. Because the Container App is created during the initial backend deployment, run:
+
+```powershell
+./scripts/setup-github-actions.ps1
+```
+
+after the Container App exists to configure `Container Apps Contributor` for the GitHub Actions managed identity.
+
+The environment-specific GitHub Actions managed identity name is stored in `config/dev.psd1` as `GithubActionsIdentityName`.
+
 ---
 
 ## Azure Container Registry Push
 
-After Azure authentication, the workflow logs in to Azure Container Registry.
+After Azure authentication, the workflow loads the Azure Container Registry name from `config/dev.psd1` and logs in to that registry.
+
+The workflow derives the login server from `AcrName` instead of hardcoding an environment-specific ACR name.
 
 The locally built image is tagged as:
 
@@ -219,27 +240,17 @@ Azure Container Apps
 
 ## Backend Deployment
 
-The backend is deployed using:
+The CI/CD workflow deploys the backend using:
 
 ```text
-scripts/deploy-backend.ps1
+scripts/deploy-backend-image.ps1
 ```
 
-The script invokes the existing Bicep infrastructure definition rather than duplicating deployment logic inside GitHub Actions.
+The script does not recreate the Container App. It loads `ResourceGroup`, `ContainerAppName`, and `AcrName` from `config/dev.psd1`, constructs the OCI image reference from the Git commit SHA, and updates the existing Azure Container App with that image.
 
-The Azure Container App receives the following runtime configuration:
+The initial Container App deployment remains a separate setup operation performed outside GitHub Actions by `scripts/deploy-backend.ps1`. GitHub Actions is responsible for updating the application image on the existing Container App, not for provisioning the complete infrastructure.
 
-```text
-SPRING_PROFILES_ACTIVE
-SPRING_DATASOURCE_URL
-ENTRA_TENANT_ID
-```
-
-`SPRING_PROFILES_ACTIVE=database` enables Azure SQL-backed data access.
-
-`SPRING_DATASOURCE_URL` configures Azure SQL access through the Container App User Assigned Managed Identity.
-
-`ENTRA_TENANT_ID` is required by Spring Security to build the Microsoft Entra JWT issuer configuration used to validate backend API access tokens.
+The Container App runtime configuration, including the database profile, managed-identity Azure SQL connection, and Microsoft Entra tenant configuration, is established by the initial backend deployment.
 
 ---
 
@@ -463,7 +474,9 @@ containing:
 }
 ```
 
-After deployment, the CI/CD pipeline retrieves this file from Azure Static Web Apps.
+After deployment, the CI/CD pipeline first resolves the deployed Static Web Apps hostname dynamically. The workflow loads `StaticWebAppName` and `ResourceGroup` from `config/dev.psd1` and runs `az staticwebapp show` to retrieve `defaultHostname`.
+
+The resolved hostname is converted to the frontend base URL and passed to `scripts/verify-frontend-deployment.ps1`. The script then retrieves `/version.json` over HTTP.
 
 Verification compares:
 
@@ -502,7 +515,7 @@ Expected != Actual
 → verification fails
 ```
 
-The verification uses HTTP directly and does not depend on the current Azure CLI tenant or subscription.
+The verification script itself retrieves `version.json` over HTTP. In GitHub Actions, however, resolving the frontend base URL depends on the authenticated Azure context and the Static Web App-scoped `Reader` role because the workflow uses Azure CLI to obtain `defaultHostname`.
 
 ---
 
@@ -612,12 +625,14 @@ Examples include:
 - Frontend tests fail.
 - OCI image build fails.
 - Azure login fails.
+- ACR configuration cannot be loaded from `config/dev.psd1`.
 - ACR push fails.
 - Backend deployment fails.
 - Backend deployed-image verification fails.
 - Backend Container App FQDN cannot be resolved during the frontend build.
 - Frontend production build fails.
 - Static Web Apps deployment fails.
+- Static Web Apps hostname resolution fails.
 - Frontend deployed-version verification fails.
 
 This fail-fast behavior prevents a successful GitHub Actions run from masking an incomplete deployment.
@@ -636,6 +651,8 @@ The completed checks include:
 Backend tests                         PASS
 Backend OCI build                     PASS
 Azure OIDC login                      PASS
+Environment configuration loading     PASS
+Resource-scoped Azure RBAC             PASS
 ACR push                              PASS
 Azure Container Apps deployment       PASS
 Backend deployment verification       PASS
@@ -719,5 +736,6 @@ docs/architecture.md
 docs/deployment.md
 docs/step04-data-access.md
 docs/step05-entra-id-authentication-authorization.md
+docs/step06-cicd.ja.md
 docs/troubleshooting.md
 ```

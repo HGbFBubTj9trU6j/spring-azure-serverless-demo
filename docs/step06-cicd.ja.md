@@ -1,10 +1,10 @@
-# Step 6: GitHub ActionsによるCI/CD
+# Step 6: GitHub Actions による CI/CD
 
-Step 6では、GitHub Actionsを使用してSpring BootバックエンドとReactフロントエンドのCI/CDを自動化します。
+Step 6 では、GitHub Actions を使用して Spring Boot バックエンドと React フロントエンドの CI/CD を自動化します。
 
-このパイプラインでは、Azure Container AppsおよびAzure Static Web Appsに対するテスト、ビルド、デプロイ、デプロイ検証を自動化します。
+このパイプラインは、Azure Container Apps と Azure Static Web Apps を対象として、アプリケーションのテスト、ビルド、デプロイ、およびデプロイ検証を自動化します。
 
-GitHub Actions Workflowは以下に定義されています。
+GitHub Actions ワークフローは次のファイルで定義されています。
 
 ```text
 .github/workflows/cicd.yml
@@ -14,27 +14,27 @@ GitHub Actions Workflowは以下に定義されています。
 
 ## 目標
 
-Step 6の目標は以下です。
+Step 6 の目標は次のとおりです。
 
-- CI/CDパイプライン実行時にBackendとFrontendの自動テストを実行する。
-- Cloud Native Buildpacksを使用してSpring Boot BackendのOCIイメージを作成する。
-- 長期間有効なAzure資格情報をGitHubに保存せずにGitHub ActionsからAzureへ認証する。
-- Backend OCIイメージをAzure Container RegistryへPushする。
-- BackendをAzure Container Appsへデプロイする。
-- React Frontendをデプロイ環境に応じた設定でBuildする。
-- FrontendをAzure Static Web Appsへデプロイする。
-- 現在のGitコミットから生成したArtifactが実際にデプロイされていることを確認する。
-- Build、Deploy、Verificationの処理をPowerShellスクリプトとして実装し、GitHub Actions以外からも再利用可能にする。
+- デプロイパイプラインを実行するたびに、バックエンドとフロントエンドの自動テストを実行する。
+- Cloud Native Buildpacks を使用して、Spring Boot バックエンドを OCI イメージとしてビルドする。
+- Azure の資格情報を長期間有効なシークレットとして保存せずに、GitHub Actions から Azure へ認証する。
+- バックエンドの OCI イメージを Azure Container Registry にプッシュする。
+- バックエンドを Azure Container Apps にデプロイする。
+- デプロイ先固有の構成を使用して React フロントエンドをビルドする。
+- フロントエンドを Azure Static Web Apps にデプロイする。
+- 現在の Git コミットから作成された成果物が実際にデプロイされていることを検証する。
+- ビルド、デプロイ、検証の処理を PowerShell スクリプトとして実装し、GitHub Actions 以外でも再利用できるようにする。
 
 ---
 
-## Pipeline Trigger
+## パイプラインのトリガー
 
-このプロジェクトは現在、一人で開発・管理しています。
+このプロジェクトは現在、1 人の開発者によって保守されています。
 
-ローカルで開発し、完成した変更を`main`へCommitしてPushする開発フローを使用しています。
+開発はローカルで行い、完了した変更をコミットして `main` に直接プッシュします。
 
-そのため、CI/CD Workflowは`main`へのPush時のみ実行します。
+このため、CI/CD ワークフローは `main` にプッシュされた場合にのみ実行されます。
 
 ```yaml
 on:
@@ -43,120 +43,120 @@ on:
       - main
 ```
 
-この構成により、リポジトリの運用ルールは以下になります。
+これにより、リポジトリでは次の運用規則を採用します。
 
 ```text
 ローカル開発
-    │
-    ▼
-Commit
-    │
-    ▼
-mainへPush
-    │
-    ▼
+        │
+        ▼
+コミット
+        │
+        ▼
+main へプッシュ
+        │
+        ▼
 GitHub Actions CI/CD
 ```
 
-別ブランチへのPushではアプリケーションをデプロイしません。
+別のブランチにプッシュしても、アプリケーションはデプロイされません。
 
-現在の開発フローではPull Requestによる自動化は必要ありません。将来、ブランチとレビューを利用する開発モデルへ移行する場合には追加できます。
+現在のプロジェクトの開発ワークフローでは、Pull Request の自動化は必要ありません。リポジトリが将来、ブランチとレビューに基づく開発モデルへ移行した場合に導入できます。
 
 ---
 
-## Pipeline概要
+## パイプラインの概要
 
-WorkflowはBackendとFrontendの独立したJobで構成されています。
+ワークフローには、互いに独立したバックエンドジョブとフロントエンドジョブがあります。
 
 ```text
-main push
+main へのプッシュ
    │
    ├───────────────────────────────────┐
    │                                   │
    ▼                                   ▼
-Backend                              Frontend
+バックエンド                          フロントエンド
    │                                   │
-   ├─ Maven Tests                      ├─ npm install
+   ├─ Maven テスト                     ├─ npm install
    │                                   │
-   ├─ Buildpacks OCI Build             ├─ Vitest Tests
+   ├─ Buildpacks OCI ビルド            ├─ Vitest テスト
    │                                   │
-   ├─ Azure Login with OIDC            ├─ Azure Login with OIDC
+   ├─ OIDC による Azure ログイン       ├─ OIDC による Azure ログイン
    │                                   │
-   ├─ ACR Login                        ├─ Production Build
+   ├─ ACR ログイン                     ├─ 本番ビルド
    │                                   │
-   ├─ OCI Image Tag                    ├─ SWA Deploy
+   ├─ OCI イメージのタグ付け           ├─ SWA デプロイ
    │                                   │
-   ├─ ACR Push                         └─ Deployment Verification
+   ├─ ACR へのプッシュ                 └─ デプロイ検証
    │
-   ├─ ACA Deploy
+   ├─ ACA デプロイ
    │
-   └─ Deployment Verification
+   └─ デプロイ検証
 ```
 
-BackendとFrontendの両方で、Git Commit SHAを変更されないデプロイ識別子として使用します。
+どちらのデプロイ経路でも、Git コミット SHA を変更不可能なデプロイ識別子として使用します。
 
 ---
 
-# Backend CI/CD
+# バックエンド CI/CD
 
-## Backend Tests
+## バックエンドテスト
 
-Backend Pipelineでは最初にMaven Test Suiteを実行します。
+バックエンドパイプラインでは、最初に Maven テストスイートを実行します。
 
 ```powershell
 ./mvnw clean test
 ```
 
-Backend Testには、Step 5で実装した認証・認可の動作確認も含まれます。
+バックエンドテストには、Step 5 で確立した認証と認可の動作が含まれます。
 
-Testは実際のMicrosoft Entra Tenantには依存しません。
+テストは、実際の Microsoft Entra テナントには依存しません。
 
-Spring SecurityのIssuer設定に必要な値を満たすため、Test専用のTenant値を使用します。
+バックエンドテストを外部テナントに結び付けずに Spring Security の issuer 構成を満たすため、テスト専用のテナント値を指定します。
 
 ---
 
-## Backend OCI Image Build
+## バックエンド OCI イメージのビルド
 
-BackendはSpring Boot Buildpacksを使用してOCIイメージとしてPackageします。
+バックエンドは、Spring Boot Buildpacks を使用して OCI イメージとしてパッケージ化されます。
 
-Pipelineでは以下を使用します。
+パイプラインでは、次の構成を使用します。
 
 ```text
 Paketo Noble Java Tiny Builder
 linux/amd64
 ```
 
-OCIイメージは最初にGitHub Actions Runner上でBuildされます。
+OCI イメージは、最初に GitHub Actions ランナー上でローカルにビルドされます。
 
-Git Commit SHAをImage Versionとして使用します。
+Git コミット SHA をイメージのバージョンとして使用します。
 
 ```text
 spring-azure-serverless-demo/backend:<github-sha>
 ```
 
-これにより、Git CommitとOCI Imageを直接対応付けられます。
+これにより、次の項目が直接関連付けられます。
 
 ```text
-Git Commit
+Git コミット
     ↓
-OCI Image
+OCI イメージ
 ```
 
-Dockerfileは必要ありません。
+Dockerfile は必要ありません。
 
 ---
 
-## GitHub ActionsからAzureへの認証
+## GitHub Actions から Azure への認証
 
-GitHub ActionsからAzureへの認証にはOpenID Connect Federationを使用します。
+GitHub Actions は、OpenID Connect フェデレーションを使用して Azure に認証します。
 
-Workflowでは以下を使用します。
+ワークフローでは次を使用します。
 
 ```text
 azure/login
 ```
 
-以下の値をGitHub Actions Secretsとして設定します。
+設定値は次のとおりです。
 
 ```text
 AZURE_CLIENT_ID
@@ -164,68 +164,70 @@ AZURE_TENANT_ID
 AZURE_SUBSCRIPTION_ID
 ```
 
-GitHub Actions Identityは、Federated Identity Credentialを設定したUser Assigned Managed Identityとして構成します。
+これらは GitHub Actions のシークレットとして保存します。
 
-これにより、長期間有効なAzure Client SecretをGitHubへ保存する必要がありません。
+GitHub Actions の ID は、フェデレーション ID 資格情報を持つユーザー割り当てマネージド ID として実装されています。
 
-GitHub Actionsが使用するIdentityと、Azure Container AppがRuntimeで使用するIdentityは分離されています。
+これにより、長期間有効な Azure クライアントシークレットを GitHub に保存する必要がなくなります。
 
-役割は以下です。
+GitHub Actions が使用する ID は、Azure Container App に割り当てるランタイム ID とは別のものです。
+
+それぞれの役割は次のとおりです。
 
 ```text
-GitHub Actions Managed Identity
+GitHub Actions のマネージド ID
     │
-    ├─ OCI ImageをACRへPush
-    └─ Azure Container AppsをDeploy
+    ├─ OCI イメージを ACR にプッシュ
+    └─ Azure Container Apps をデプロイ
 
 
-Container App Managed Identity
+Container App のマネージド ID
     │
-    ├─ RuntimeでOCI ImageをPull
-    └─ Azure SQL DatabaseへAccess
+    ├─ 実行時に OCI イメージをプル
+    └─ Azure SQL Database にアクセス
 ```
 
-Identityごとに責務を分離することで、必要な権限を限定できます。
+これらの ID を分離することで、それぞれの役割とアクセス許可を限定できます。
 
 ---
 
-## Azure Container RegistryへのPush
+## Azure Container Registry へのプッシュ
 
-Azure認証後、WorkflowはAzure Container RegistryへLoginします。
+Azure への認証後、ワークフローは Azure Container Registry にログインします。
 
-ローカルでBuildしたImageに以下のTagを付与します。
+ローカルでビルドしたイメージに、次のタグを付けます。
 
 ```text
 <acr-login-server>/backend:<github-sha>
 ```
 
-その後、Azure Container RegistryへPushします。
+その後、Azure Container Registry にプッシュします。
 
-Git Commit SHAは以下のすべてで共通のDeployment IDとして維持されます。
+したがって、コミット SHA は次のすべてで一貫したデプロイ識別子となります。
 
 ```text
-Git Commit
+Git コミット
     ↓
-Local OCI Image
+ローカル OCI イメージ
     ↓
-ACR OCI Image
+ACR OCI イメージ
     ↓
 Azure Container Apps
 ```
 
 ---
 
-## Backend Deployment
+## バックエンドのデプロイ
 
-Backendは以下のScriptを使用してDeployします。
+バックエンドは、次のスクリプトを使用してデプロイします。
 
 ```text
 scripts/deploy-backend.ps1
 ```
 
-GitHub Actions内にDeployment Logicを重複して実装せず、既存のBicep Infrastructure DefinitionをScriptから利用します。
+このスクリプトは、GitHub Actions 内にデプロイロジックを重複して実装するのではなく、既存の Bicep インフラストラクチャ定義を呼び出します。
 
-Azure Container Appには以下のRuntime Configurationを設定します。
+Azure Container App には、次のランタイム構成が渡されます。
 
 ```text
 SPRING_PROFILES_ACTIVE
@@ -233,176 +235,172 @@ SPRING_DATASOURCE_URL
 ENTRA_TENANT_ID
 ```
 
-`SPRING_PROFILES_ACTIVE=database`によってAzure SQLを使用するData Accessを有効化します。
+`SPRING_PROFILES_ACTIVE=database` を設定すると、Azure SQL を使用するデータアクセスが有効になります。
 
-`SPRING_DATASOURCE_URL`では、Container AppのUser Assigned Managed Identityを使用してAzure SQLへAccessするよう設定します。
+`SPRING_DATASOURCE_URL` は、Container App のユーザー割り当てマネージド ID を介した Azure SQL へのアクセスを構成します。
 
-`ENTRA_TENANT_ID`は、Spring SecurityがBackend API Access Tokenを検証するためのMicrosoft Entra JWT Issuerを構成するために必要です。
+`ENTRA_TENANT_ID` は、バックエンド API のアクセストークンを検証するために Spring Security が使用する Microsoft Entra JWT issuer 構成を生成する際に必要です。
 
 ---
 
-## Backend Deployment Verification
+## バックエンドのデプロイ検証
 
-Azure Deployment Commandが成功したことだけでは、期待したApplication Imageが実際に稼働していることの証明にはなりません。
+Azure のデプロイコマンドが成功しただけでは、想定したアプリケーションイメージが実行されていることの証明にはなりません。
 
-そのため、Step 6ではBackend Deployment後にDeployment Verificationを実行します。
+そのため Step 6 では、バックエンドのデプロイ後にデプロイ検証を実行します。
 
-Verificationでは、Azure Container AppsにDeployされているImageと期待するGit Commit SHAを比較します。
+この検証では、デプロイ済みの Container App イメージを、期待する Git コミット SHA と照合します。
 
-概念的には以下です。
+概念的には、次のようになります。
 
 ```text
-Expected
+期待値
 github.sha
     │
     ▼
 backend:<github.sha>
 
 
-Actual
+実際の値
 Azure Container Apps
     │
     ▼
-Running Image Tag
+実行中のイメージタグ
 ```
 
-Expected Versionと実際にDeployされたVersionが一致した場合のみ、Deploymentを検証済みとします。
+期待するバージョンとデプロイ済みのバージョンが一致した場合にのみ、デプロイが検証済みとみなされます。
 
-これにより、
+これにより、次の 2 つを区別できます。
 
 ```text
-Deployment Commandが成功した
+デプロイコマンドが成功した
 ```
 
-ことと、
+次の状態とは異なります。
 
 ```text
-今回のGit Commitから生成したArtifactが実際にDeployされている
+この Git コミットからビルドした成果物が実際にデプロイされている
 ```
-
-ことを区別します。
 
 ---
 
-# Frontend CI/CD
+# フロントエンド CI/CD
 
-## Frontend Tests
+## フロントエンドテスト
 
-Frontend Jobでは以下でDependencyをInstallします。
+フロントエンドジョブでは、次のコマンドで依存関係をインストールします。
 
 ```powershell
 npm ci
 ```
 
-続いてVitest Test Suiteを実行します。
+続いて、Vitest テストスイートを実行します。
 
 ```powershell
 npm test -- --run
 ```
 
-Frontend Testには以下が含まれます。
+フロントエンドテストには、次の項目が含まれます。
 
-- Fortune取得
-- API Error処理
-- `Fortune.Admin`によるUI表示制御
-- Fortune Management
+- Fortune 取得の動作
+- API エラー時の動作
+- `Fortune.Admin` に基づく UI の表示
+- Fortune Management の動作
 
-FrontendをBuild・Deployする前にこれらのTestを実行します。
+これらのテストは、フロントエンドのビルドまたはデプロイの前に実行されます。
 
 ---
 
-## Frontend Production Build
+## フロントエンドの本番ビルド
 
-Production Frontendは以下のScriptでBuildします。
+本番用フロントエンドは、次のスクリプトでビルドします。
 
 ```text
 scripts/build-frontend.ps1
 ```
 
-ScriptはDeploy済みAzure Container Apps BackendのFQDNを取得し、以下を通してViteへ渡します。
+このスクリプトは、デプロイ済みの Azure Container Apps バックエンドの FQDN を解決し、次の値を介して Vite に渡します。
 
 ```text
 VITE_API_BASE_URL
 ```
 
-GitHub Actions WorkflowはGit Commit SHAを以下のParameterとして渡します。
+GitHub Actions ワークフローは、Git コミット SHA を次のように渡します。
 
 ```text
 -BuildVersion "${{ github.sha }}"
 ```
 
-Build Scriptはその値をReactへ以下で渡します。
+ビルドスクリプトは、次の値を介して React に渡します。
 
 ```text
 VITE_BUILD_VERSION
 ```
 
-同じ値をVite Build前に以下にも出力します。
+同じ値は、Vite のビルド前に次のファイルにも書き込まれます。
 
 ```text
 version.json
 ```
 
-生成したファイルは最終Deployment Outputへ以下として含まれます。
+生成されたファイルは、次のパスでデプロイ出力に含まれます。
 
 ```text
 frontend/dist/version.json
 ```
 
-`frontend/public`配下の一時ファイルはBuild後に削除します。
-
-これにより、Environment固有の生成ファイルをWorking Treeへ残しません。
+環境固有の生成データが作業ツリーに残らないように、`frontend/public` 配下の一時ソースファイルはビルド後に削除されます。
 
 ---
 
-## BuildのFail-Fast
+## ビルドのフェイルファスト動作
 
-Frontend Production Buildでは、Deploy済みBackend Endpointが必要です。
+フロントエンドの本番ビルドは、デプロイ済みバックエンドのエンドポイントに依存します。
 
-Azure Container AppのFQDNを取得できなかった場合に、不正なAPI URLを使用してBuildを続行してはいけません。
+Azure Container App の FQDN を解決できない場合、無効な API URL のままビルドを続行してはいけません。
 
-そのためBuild Scriptでは、
+そのため、ビルドスクリプトは次を明示的に確認します。
 
 ```text
-az containerapp show exit code
+az containerapp show の終了コード
 ```
 
-を確認するとともに、取得したFQDNが空でないことを確認します。
+さらに、返された FQDN が空でないことを確認します。
 
-Backend Endpointを取得できなかった場合、Buildはその時点で失敗します。
+バックエンドのエンドポイントを解決できない場合、ビルドは直ちに終了します。
 
-これにより、例えば、
+これにより、次のようなビルドが誤って成功とみなされることを防ぎます。
 
 ```text
 VITE_API_BASE_URL=https://
 ```
 
-のような不完全な設定でFrontend Buildが成功扱いになることを防止します。
-
 ---
 
-## Azure Static Web Apps Deployment
+## Azure Static Web Apps へのデプロイ
 
-Production Frontendは以下でDeployします。
+本番用フロントエンドは、次のスクリプトでデプロイします。
 
 ```text
 scripts/deploy-frontend.ps1
 ```
 
-DeploymentではGitHub Actions Secretとして保存した以下を使用します。
+デプロイでは、次の値を使用します。
 
 ```text
 SWA_DEPLOYMENT_TOKEN
 ```
 
-Azure Static Web Appsは静的Hosting Layerとして使用します。
+これは GitHub Actions のシークレットとして保存します。
 
-Application User AuthenticationはAzure Static Web Appsの追加認証レイヤーではなく、React/MSALによって実行します。
+Azure Static Web Apps は、静的ホスティングレイヤーとして使用します。
 
-これによりLocal DevelopmentとAzure DeploymentでAuthentication Flowを統一しています。
+アプリケーションユーザーの認証は、Azure Static Web Apps に追加の認証レイヤーを設けるのではなく、React/MSAL によって実行します。
+
+これにより、ローカル開発環境とデプロイ済みアプリケーションで認証フローの一貫性を保ちます。
 
 ```text
-Local
+ローカル
 
 React
   │
@@ -413,7 +411,7 @@ MSAL
 Microsoft Entra ID
   │
   ▼
-Backend API Access Token
+バックエンド API アクセストークン
   │
   ▼
 Spring Boot
@@ -433,7 +431,7 @@ MSAL
 Microsoft Entra ID
   │
   ▼
-Backend API Access Token
+バックエンド API アクセストークン
   │
   ▼
 Spring Boot
@@ -441,19 +439,19 @@ Spring Boot
 
 ---
 
-## Frontend Deployment Verification
+## フロントエンドのデプロイ検証
 
-Static Web Apps Deployment Commandが成功しただけでは、新しくBuildしたFrontendが既に配信されていることは証明できません。
+Static Web Apps のデプロイコマンドが成功しただけでは、新しくビルドしたフロントエンドがすでに配信されていることの証明にはなりません。
 
-そのためStep 6ではFrontend Deployment Verificationを追加しています。
+そのため Step 6 では、フロントエンドのデプロイ検証を追加します。
 
-Production Buildでは以下を公開します。
+本番ビルドでは、次のファイルを公開します。
 
 ```text
 /version.json
 ```
 
-内容は以下です。
+内容は次のとおりです。
 
 ```json
 {
@@ -461,113 +459,111 @@ Production Buildでは以下を公開します。
 }
 ```
 
-Deployment後、CI/CD PipelineはAzure Static Web Appsからこのファイルを取得します。
+デプロイ後、CI/CD パイプラインは Azure Static Web Apps からこのファイルを取得します。
 
-Verificationでは以下を比較します。
+検証では、次の値を比較します。
 
 ```text
-Expected Version
+期待するバージョン
     │
     └─ github.sha
 
-Actual Version
+実際のバージョン
     │
     └─ SWA /version.json
 ```
 
-両方のVersionが一致した場合のみDeploymentを成功とします。
+両方のバージョンが一致した場合にのみ、デプロイが成功したとみなされます。
 
-Verification Scriptは以下です。
+検証スクリプトは次のとおりです。
 
 ```text
 scripts/verify-frontend-deployment.ps1
 ```
 
-Deployment Command完了から新しいStatic Contentが配信されるまで短い時間差が発生する可能性があるため、ScriptではRetryを行います。
+デプロイコマンドの完了から新しい静的コンテンツが利用可能になるまでに短い遅延が生じる場合があるため、このスクリプトは再試行します。
 
-Verificationは成功・失敗の両方を検証しました。
-
-```text
-Expected == Actual
-→ Verification Success
-```
+検証では、次の両方のケースをテストしました。
 
 ```text
-Expected != Actual
-→ Retry
-→ Verification Failure
+期待値 == 実際の値
+→ 検証成功
 ```
 
-VerificationはHTTPで直接実行するため、現在のAzure CLI TenantやSubscription Contextには依存しません。
+および、次のケースです。
+
+```text
+期待値 != 実際の値
+→ 再試行
+→ 検証失敗
+```
+
+この検証は HTTP を直接使用し、現在の Azure CLI テナントまたはサブスクリプションには依存しません。
 
 ---
 
-# Deployment VerificationとE2E Verification
+# デプロイ検証と E2E 検証の違い
 
-Step 6では、Deployment VerificationとEnd-to-End Scenario Verificationを明確に区別します。
+Step 6 では、デプロイ検証とエンドツーエンドのシナリオ検証を意図的に区別します。
 
-## Deployment Verification
+## デプロイ検証
 
-Deployment Verificationが確認するのは、
+デプロイ検証では、次の問いに答えます。
 
-> このGit Commitから生成したArtifactが実際にDeployされたか
+> この Git コミットから作成した成果物が実際にデプロイされたか。
 
-です。
-
-Backend：
+バックエンド:
 
 ```text
 github.sha
 ==
-Deployed OCI Image Tag
+デプロイ済みの OCI イメージタグ
 ```
 
-Frontend：
+フロントエンド:
 
 ```text
 github.sha
 ==
-Deployed /version.json
+デプロイ済みの /version.json
 ```
 
-これらはGitHub Actionsで自動化しています。
+これらの確認は GitHub Actions によって自動化されています。
 
-## End-to-End Verification
+## エンドツーエンド検証
 
-E2E Verificationが確認するのは、
+E2E 検証では、次の問いに答えます。
 
-> DeployされたSystemを使って、Userが目的とするApplication Scenarioを完了できるか
+> ユーザーは、デプロイ済みシステムを通じて想定したアプリケーションシナリオを完了できるか。
 
-です。
+デプロイ済みアプリケーションは、Step 5 のユーザーシナリオを使用して手動で再検証しました。
 
-Step 5で定義したUser Scenarioを使用して、Deploy後のApplicationを手動で再検証しました。
+検証したフローは次のとおりです。
 
-確認したFlowは以下です。
+1. デプロイ済みの React アプリケーションを開く。
+2. MSAL を使用して Microsoft Entra ID にサインインする。
+3. サインイン済みの状態を確認する。
+4. Fortune を取得する。
+5. ロールに基づく Fortune Management UI の表示を確認する。
+6. `Fortune.Admin` ユーザーとして Fortune レコードを一覧表示する。
+7. Fortune を追加する。
+8. Fortune が一覧に表示されることを確認する。
+9. Fortune を削除する。
+10. Fortune が一覧から消えることを確認する。
+11. `Fortune.Admin` を持たないユーザーが管理操作を実行できないことを確認する。
+12. サインアウトする。
 
-1. Deploy済みReact Applicationを開く。
-2. MSALを使用してMicrosoft Entra IDへSign inする。
-3. Sign in済み状態を確認する。
-4. Fortuneを取得する。
-5. Fortune Management UIが`Fortune.Admin`にのみ表示されることを確認する。
-6. `Fortune.Admin` Userとして既存Fortuneを一覧表示する。
-7. Fortuneを追加する。
-8. 追加したFortuneが一覧に表示されることを確認する。
-9. Fortuneを削除する。
-10. 削除したFortuneが一覧から消えることを確認する。
-11. `Fortune.Admin`を持たないUserが管理操作を実行できないことを確認する。
-12. Sign outする。
+対話型の Microsoft Entra 認証は、現在 GitHub Actions では自動化していません。
 
-Microsoft Entra ID Interactive Authenticationは現在GitHub Actionsでは自動化していません。
+このシナリオを自動化すると、テストユーザーのライフサイクル、MFA、条件付きアクセス、資格情報の取り扱いなど、追加の考慮事項が生じます。
 
-このScenarioを自動化すると、Test User Lifecycle、MFA、Conditional Access、Credential Managementなど、CI/CDとは異なる論点が追加されます。
-
-そのためStep 6では、Deployment VerificationまでをCI/CDとして自動化し、Application全体のE2E Scenarioは独立したManual Quality Checkとして扱います。
+そのため Step 6 では、自動 CI/CD はデプロイ検証までとし、アプリケーション全体の E2E シナリオは独立した手動品質チェックとして残します。
 
 ---
 
-# GitHub Actions Secrets
+# GitHub Actions のシークレット
 
-CI/CD Workflowでは以下のGitHub Actions Secretsを使用します。
+CI/CD ワークフローには、次の GitHub Actions シークレットが必要です。
 
 ```text
 AZURE_CLIENT_ID
@@ -583,133 +579,135 @@ VITE_API_SCOPE
 SWA_DEPLOYMENT_TOKEN
 ```
 
-それぞれの責務は異なります。
+それぞれの役割は意図的に分けられています。
 
-| Secret | 用途 |
+| シークレット | 用途 |
 |---|---|
-| `AZURE_CLIENT_ID` | GitHub Actionsが使用するFederated Azure Identity |
-| `AZURE_TENANT_ID` | GitHub OIDC Loginで使用するAzure Tenant |
-| `AZURE_SUBSCRIPTION_ID` | Deployment対象Azure Subscription |
-| `ENTRA_TENANT_ID` | Spring Security JWT Issuer Validationで使用するMicrosoft Entra Tenant |
-| `VITE_ENTRA_TENANT_ID` | React/MSALで使用するMicrosoft Entra Tenant |
-| `VITE_ENTRA_CLIENT_ID` | React/MSAL Public Client Application ID |
-| `VITE_API_SCOPE` | Backend API Delegated Scope |
-| `SWA_DEPLOYMENT_TOKEN` | Azure Static Web Apps Deployment |
+| `AZURE_CLIENT_ID` | GitHub Actions のフェデレーション済み Azure ID |
+| `AZURE_TENANT_ID` | GitHub OIDC ログインで使用する Azure テナント |
+| `AZURE_SUBSCRIPTION_ID` | デプロイ済みインフラストラクチャを含む Azure サブスクリプション |
+| `ENTRA_TENANT_ID` | Spring Security の JWT issuer 検証で使用する Microsoft Entra テナント |
+| `VITE_ENTRA_TENANT_ID` | React/MSAL で使用する Microsoft Entra テナント |
+| `VITE_ENTRA_CLIENT_ID` | React/MSAL のパブリッククライアントアプリケーション ID |
+| `VITE_API_SCOPE` | バックエンド API の委任されたスコープ |
+| `SWA_DEPLOYMENT_TOKEN` | Azure Static Web Apps のデプロイ |
 
-Authentication TenantとAzure Subscription Tenantは異なる場合があります。
+認証テナントは、Azure サブスクリプションのテナントと異なる場合があります。
 
-現在のProject Architectureでは、この区別が重要です。
-
----
-
-# CI/CD Failure Behavior
-
-Pipelineは前提となる処理が失敗した場合に、不完全なArtifactをDeployしたり成功扱いにしたりせず、失敗するよう設計します。
-
-例えば以下です。
-
-- Backend Test Failure
-- Frontend Test Failure
-- OCI Image Build Failure
-- Azure Login Failure
-- ACR Push Failure
-- Backend Deployment Failure
-- Backend Deployed Image Verification Failure
-- Frontend Build時にBackend Container App FQDNを取得できない
-- Frontend Production Build Failure
-- Static Web Apps Deployment Failure
-- Frontend Deployed Version Verification Failure
-
-Fail-Fastによって、不完全なDeploymentをGitHub Actionsの成功として扱うことを防止します。
+この区別は、現在のプロジェクトアーキテクチャにおいて重要です。
 
 ---
 
-# 実施したVerification
+# CI/CD の失敗時の動作
 
-Step 6は、自動Pipeline実行とDeploy済みApplicationの双方で確認しました。
+前提となる処理が失敗した場合、パイプラインは不完全な成果物をデプロイまたは受け入れるのではなく、失敗するように設計されています。
+
+次のようなケースが該当します。
+
+- バックエンドテストが失敗した。
+- フロントエンドテストが失敗した。
+- OCI イメージのビルドが失敗した。
+- Azure へのログインが失敗した。
+- ACR へのプッシュが失敗した。
+- バックエンドのデプロイが失敗した。
+- バックエンドのデプロイ済みイメージの検証が失敗した。
+- フロントエンドのビルド中に、バックエンド Container App の FQDN を解決できなかった。
+- フロントエンドの本番ビルドが失敗した。
+- Static Web Apps のデプロイが失敗した。
+- フロントエンドのデプロイ済みバージョンの検証が失敗した。
+
+このフェイルファスト動作により、不完全なデプロイが GitHub Actions の成功結果に隠れてしまうことを防ぎます。
+
+---
+
+# 実施した検証
+
+Step 6 は、自動パイプラインの実行とデプロイ済みアプリケーションの検証の両方によって確認しました。
+
+完了した確認項目は次のとおりです。
 
 ## GitHub Actions
 
 ```text
-Backend Tests                         PASS
-Backend OCI Build                     PASS
-Azure OIDC Login                      PASS
-ACR Push                              PASS
-Azure Container Apps Deployment       PASS
-Backend Deployment Verification       PASS
+バックエンドテスト                           PASS
+バックエンド OCI ビルド                      PASS
+Azure OIDC ログイン                          PASS
+ACR へのプッシュ                             PASS
+Azure Container Apps へのデプロイ             PASS
+バックエンドのデプロイ検証                    PASS
 
-Frontend Tests                        PASS
-Frontend Production Build             PASS
-Azure Static Web Apps Deployment      PASS
-Frontend Deployment Verification      PASS
+フロントエンドテスト                          PASS
+フロントエンドの本番ビルド                    PASS
+Azure Static Web Apps へのデプロイ             PASS
+フロントエンドのデプロイ検証                  PASS
 ```
 
-## Deploy済みApplication
+## デプロイ済みアプリケーション
 
 ```text
-Frontend Version == GitHub SHA         PASS
-Sign in                               PASS
-Sign out                              PASS
-Fortune Retrieval                     PASS
-Role-based UI Visibility              PASS
-Fortune List                          PASS
-Fortune Creation                      PASS
-Fortune Deletion                      PASS
-Backend Authorization                 PASS
+フロントエンドバージョン == GitHub SHA        PASS
+サインイン                                    PASS
+サインアウト                                  PASS
+Fortune の取得                                PASS
+ロールに基づく UI の表示                      PASS
+Fortune の一覧表示                            PASS
+Fortune の作成                                PASS
+Fortune の削除                                PASS
+バックエンドの認可                            PASS
 ```
 
-DeployされたFrontend Versionが、GitHub Actionsで処理したGit Commit SHAと一致することも確認しました。
+デプロイ済みフロントエンドのバージョンが、GitHub Actions で処理した Git コミット SHA と一致することを確認しました。
 
 ---
 
 # 結果
 
-Step 6によって、`main`へのPushから検証済みAzure Deploymentまでの一連のCI/CDが成立しました。
+Step 6 により、`main` ブランチへのプッシュから検証済みの Azure デプロイまでを網羅する CI/CD 経路が確立されます。
 
 ```text
 ローカル開発
-    │
-    ▼
-Commit
-    │
-    ▼
-mainへPush
-    │
-    ▼
+        │
+        ▼
+コミット
+        │
+        ▼
+main へプッシュ
+        │
+        ▼
 GitHub Actions CI/CD
-    │
-    ├──────────── Backend ────────────┐
-    │                                 │
-    │ Test                            │
-    │   ↓                             │
-    │ OCI Build                       │
-    │   ↓                             │
-    │ ACR Push                        │
-    │   ↓                             │
-    │ ACA Deploy                      │
-    │   ↓                             │
-    │ Deployment Verification         │
-    │                                 │
-    └──────────── Frontend ───────────┤
-                                      │
-      Test                            │
-        ↓                             │
-      Production Build                │
-        ↓                             │
-      SWA Deploy                      │
-        ↓                             │
-      Deployment Verification         │
-                                      ▼
-                              Verified Azure Deployment
+        │
+        ├──────────── バックエンド ────────────┐
+        │                                     │
+        │ テスト                              │
+        │   ↓                                 │
+        │ OCI ビルド                          │
+        │   ↓                                 │
+        │ ACR へのプッシュ                    │
+        │   ↓                                 │
+        │ ACA デプロイ                        │
+        │   ↓                                 │
+        │ デプロイ検証                        │
+        │                                     │
+        └──────────── フロントエンド ──────────┤
+                                              │
+          テスト                              │
+            ↓                                 │
+          本番ビルド                          │
+            ↓                                 │
+          SWA デプロイ                        │
+            ↓                                 │
+          デプロイ検証                        │
+                                              ▼
+                                      検証済み Azure デプロイ
 ```
 
-PipelineではDeployment Commandが成功したことだけでなく、現在のGit Commitに対応するArtifactが実際にDeployされていることまで検証します。
+このパイプラインは、デプロイコマンドが成功したことだけでなく、現在の Git コミットに対応する成果物が実際にデプロイされていることも検証します。
 
-User Scenario全体のE2E Verificationは、独立したQuality Checkとして扱います。
+ユーザーシナリオ全体の E2E 検証は、独立した品質チェックとして残します。
 
 ---
 
-## 関連Document
+## 関連ドキュメント
 
 ```text
 README.md
