@@ -111,6 +111,52 @@ jobs:
             -o json \
             --file security-reports/grype-report.json
 
+      - name: Create security scan summary
+        shell: pwsh
+        run: |
+          $report = Get-Content "./security-reports/grype-report.json" -Raw |
+            ConvertFrom-Json
+
+          $counts = @{}
+
+          foreach ($match in $report.matches) {
+            $severity = $match.vulnerability.severity
+
+            if (-not $counts.ContainsKey($severity)) {
+              $counts[$severity] = 0
+            }
+
+            $counts[$severity]++
+          }
+
+          $critical   = if ($counts["Critical"])   { $counts["Critical"] }   else { 0 }
+          $high       = if ($counts["High"])       { $counts["High"] }       else { 0 }
+          $medium     = if ($counts["Medium"])     { $counts["Medium"] }     else { 0 }
+          $low        = if ($counts["Low"])        { $counts["Low"] }        else { 0 }
+          $negligible = if ($counts["Negligible"]) { $counts["Negligible"] } else { 0 }
+          $unknown    = if ($counts["Unknown"])    { $counts["Unknown"] }    else { 0 }
+          $total      = $report.matches.Count
+
+          @"
+          ## Container Security Scan
+
+          **Image tag:** `${{ inputs.image_tag }}`
+
+          **Image digest:** `$env:IMAGE_DIGEST`
+
+          | Severity | Matches |
+          |---|---:|
+          | Critical | $critical |
+          | High | $high |
+          | Medium | $medium |
+          | Low | $low |
+          | Negligible | $negligible |
+          | Unknown | $unknown |
+          | **Total** | **$total** |
+
+          Detailed SBOM and vulnerability reports are stored in private Azure Blob Storage.
+          "@ >> $env:GITHUB_STEP_SUMMARY
+
       - name: Create scan metadata
         shell: pwsh
         run: |
