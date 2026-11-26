@@ -84,9 +84,11 @@ jobs:
           "SYFT_REGISTRY_AUTH_PASSWORD=$token" >> $env:GITHUB_ENV
 
       - name: Install Syft
+        id: syft
         uses: anchore/sbom-action/download-syft@v0
 
       - name: Install Grype
+        id: grype
         uses: anchore/scan-action/download-grype@v7
 
       - name: Generate security report directory
@@ -104,7 +106,7 @@ jobs:
       - name: Scan SBOM with Grype
         shell: bash
         run: |
-          grype \
+          "${{ steps.grype.outputs.cmd }}" \
             "sbom:security-reports/sbom.syft.json" \
             -o json \
             --file security-reports/grype-report.json
