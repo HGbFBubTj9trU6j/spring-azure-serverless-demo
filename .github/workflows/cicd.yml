@@ -39,12 +39,19 @@ jobs:
       - name: Run backend tests
         run: ./mvnw clean test
 
+      - name: Load build configuration
+        shell: pwsh
+        working-directory: .
+        run: |
+          $config = Import-PowerShellDataFile "./config/dev.psd1"
+          "BACKEND_BUILDER_IMAGE=$($config.BackendBuilderImage)" >> $env:GITHUB_ENV
+
       - name: Build backend OCI image
         run: |
           ./mvnw spring-boot:build-image \
             -Dspring-boot.build-image.imageName=spring-azure-serverless-demo/backend:${{ github.sha }} \
             -Dbuild.version=${{ github.sha }} \
-            -Dspring-boot.build-image.builder=paketobuildpacks/builder-noble-java-tiny:0.0.197 \
+            -Dspring-boot.build-image.builder=${{ env.BACKEND_BUILDER_IMAGE }} \
             -Dspring-boot.build-image.imagePlatform=linux/amd64
 
       - name: Azure login with OIDC
