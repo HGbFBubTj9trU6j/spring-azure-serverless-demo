@@ -28,3 +28,7 @@ param sqlDatabaseName = 'fortune'
 param sqlEntraAdministratorLogin = readEnvironmentVariable('SQL_ENTRA_ADMIN_LOGIN')
 
 param sqlEntraAdministratorObjectId = readEnvironmentVariable('SQL_ENTRA_ADMIN_OBJECT_ID')
+
+// DevSecOps
+param securityReportStorageAccountName = readEnvironmentVariable('SECURITY_REPORT_STORAGE_ACCOUNT_NAME')
+param securityReportContainerName = readEnvironmentVariable('SECURITY_REPORT_CONTAINER_NAME')

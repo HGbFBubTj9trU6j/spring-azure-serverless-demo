@@ -55,6 +55,13 @@ param sqlEntraAdministratorObjectId string
 ])
 param sqlEntraAdministratorPrincipalType string = 'User'
 
+// DevSecOps
+@description('Storage account name for security reports')
+param securityReportStorageAccountName string
+
+@description('Blob container name for security reports')
+param securityReportContainerName string
+
 resource rg 'Microsoft.Resources/resourceGroups@2025-04-01' = {
   name: resourceGroupName
   location: location
@@ -159,6 +166,32 @@ module sqlDatabase './modules/sql-database.bicep' = {
 
     autoPauseDelay: 60
   }
+}
+
+// DevSecOps
+module securityReportStorage 'modules/security-report-storage.bicep' = {
+  name: 'security-report-storage'
+  scope: rg
+  params: {
+    location: location
+    storageAccountName: securityReportStorageAccountName
+    containerName: securityReportContainerName
+  }
+}
+
+// GitHub Actions role assignment for security reports
+module githubActionsSecurityReportStorageRole 'modules/github-actions-security-report-storage-role.bicep' = {
+  name: 'github-actions-security-report-storage-role'
+  scope: rg
+  params: {
+    storageAccountName: securityReportStorageAccountName
+    containerName: securityReportContainerName
+    githubActionsIdentityName: githubActionsIdentityName
+  }
+  dependsOn: [
+    securityReportStorage
+    githubActionsIdentity
+  ]
 }
 
 output resourceGroupId string = rg.id

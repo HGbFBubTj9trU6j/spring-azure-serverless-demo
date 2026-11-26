@@ -24,4 +24,8 @@
     # Buildpacks
     # Pin the builder by digest for reproducible builds.
     BackendBuilderImage = "paketobuildpacks/builder-noble-java-tiny@sha256:96678722f0d61f6102ceccd83f829a935a304fc353bbd5b20bbbfd90c28533b8"
+
+    # DevSecOps
+    SecurityReportStorageAccountName = "springazureserverlesssec"
+    SecurityReportContainerName      = "security-reports"
 }

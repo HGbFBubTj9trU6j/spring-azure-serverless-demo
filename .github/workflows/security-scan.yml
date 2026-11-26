@@ -1,0 +1,158 @@
+name: Security Scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Full Git commit SHA used as the ACR backend image tag
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  scan:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Validate image tag
+        shell: bash
+        run: |
+          if [[ ! "${{ inputs.image_tag }}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "image_tag must be a full 40-character lowercase Git SHA."
+            exit 1
+          fi
+
+      - name: Azure login with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Load security scan configuration
+        shell: pwsh
+        run: |
+          $config = Import-PowerShellDataFile "./config/dev.psd1"
+
+          "ACR_NAME=$($config.AcrName)" >> $env:GITHUB_ENV
+          "ACR_LOGIN_SERVER=$($config.AcrName).azurecr.io" >> $env:GITHUB_ENV
+          "SECURITY_STORAGE_ACCOUNT=$($config.SecurityReportStorageAccountName)" >> $env:GITHUB_ENV
+          "SECURITY_STORAGE_CONTAINER=$($config.SecurityReportContainerName)" >> $env:GITHUB_ENV
+
+      - name: Resolve backend image digest
+        shell: pwsh
+        run: |
+          $digest = az acr repository show `
+            --name $env:ACR_NAME `
+            --image "backend:${{ inputs.image_tag }}" `
+            --query digest `
+            --output tsv
+
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($digest)) {
+            throw "Failed to resolve the backend image digest."
+          }
+
+          "IMAGE_DIGEST=$digest" >> $env:GITHUB_ENV
+          "IMAGE_REFERENCE=$($env:ACR_LOGIN_SERVER)/backend@$digest" >> $env:GITHUB_ENV
+
+          Write-Host "Image tag:    ${{ inputs.image_tag }}"
+          Write-Host "Image digest: $digest"
+
+      - name: Get ACR access token
+        shell: pwsh
+        run: |
+          $token = az acr login `
+            --name $env:ACR_NAME `
+            --expose-token `
+            --query accessToken `
+            --output tsv
+
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($token)) {
+            throw "Failed to get the ACR access token."
+          }
+
+          Write-Output "::add-mask::$token"
+
+          "SYFT_REGISTRY_AUTH_USERNAME=00000000-0000-0000-0000-000000000000" >> $env:GITHUB_ENV
+          "SYFT_REGISTRY_AUTH_PASSWORD=$token" >> $env:GITHUB_ENV
+
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Install Grype
+        uses: anchore/scan-action/download-grype@v7
+
+      - name: Generate security report directory
+        shell: bash
+        run: mkdir -p security-reports
+
+      - name: Generate Syft SBOMs
+        shell: bash
+        run: |
+          syft \
+            "registry:${IMAGE_REFERENCE}" \
+            -o syft-json=security-reports/sbom.syft.json \
+            -o spdx-json=security-reports/sbom.spdx.json
+
+      - name: Scan SBOM with Grype
+        shell: bash
+        run: |
+          grype \
+            "sbom:security-reports/sbom.syft.json" \
+            -o json \
+            --file security-reports/grype-report.json
+
+      - name: Create scan metadata
+        shell: pwsh
+        run: |
+          $metadata = [ordered]@{
+            repository  = "${{ github.repository }}"
+            commitSha   = "${{ inputs.image_tag }}"
+            image       = "$($env:ACR_LOGIN_SERVER)/backend:${{ inputs.image_tag }}"
+            imageDigest = $env:IMAGE_DIGEST
+            scannedAt   = (Get-Date).ToUniversalTime().ToString("o")
+          }
+
+          $metadata |
+            ConvertTo-Json |
+            Set-Content `
+              -Path "./security-reports/scan-metadata.json" `
+              -Encoding utf8
+
+      - name: Upload reports to private Blob Storage
+        shell: pwsh
+        run: |
+          $prefix = "backend/${{ inputs.image_tag }}"
+
+          $reports = @(
+            "sbom.syft.json",
+            "sbom.spdx.json",
+            "grype-report.json",
+            "scan-metadata.json"
+          )
+
+          foreach ($report in $reports) {
+            az storage blob upload `
+              --account-name $env:SECURITY_STORAGE_ACCOUNT `
+              --container-name $env:SECURITY_STORAGE_CONTAINER `
+              --name "$prefix/$report" `
+              --file "./security-reports/$report" `
+              --auth-mode login `
+              --overwrite true `
+              --output none
+
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to upload $report."
+            }
+          }
+
+          Write-Host "Security reports uploaded to:"
+          Write-Host "$($env:SECURITY_STORAGE_ACCOUNT)/$($env:SECURITY_STORAGE_CONTAINER)/$prefix"          
+          

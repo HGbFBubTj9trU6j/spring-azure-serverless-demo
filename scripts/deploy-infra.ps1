@@ -1,5 +1,10 @@
 $ErrorActionPreference = "Stop"
 
+$config = Import-PowerShellDataFile ".\config\dev.psd1"
+
+$env:SECURITY_REPORT_STORAGE_ACCOUNT_NAME = $config.SecurityReportStorageAccountName
+$env:SECURITY_REPORT_CONTAINER_NAME = $config.SecurityReportContainerName
+
 Write-Host "========================================"
 Write-Host "Deploy Infrastructure"
 Write-Host "========================================"
