@@ -9,6 +9,7 @@ The current implementation combines:
 - Spring Boot
 - Azure Container Apps
 - Azure Container Registry
+- Azure Blob Storage
 - Azure SQL Database
 - Microsoft Entra ID authentication
 - React authentication and access-token acquisition with MSAL
@@ -16,6 +17,8 @@ The current implementation combines:
 - User Assigned Managed Identity
 - Infrastructure as Code with Bicep
 - Cloud Native Buildpacks
+- Syft for software inventory and SBOM generation
+- Grype for vulnerability scanning
 
 The React frontend is hosted on Azure Static Web Apps and communicates with a Spring Boot REST API running on Azure Container Apps.
 
@@ -54,6 +57,13 @@ The application currently supports:
 - Environment-specific non-secret configuration through `config/dev.psd1`
 - Dynamic resolution of Azure Container Registry and Azure Static Web Apps deployment targets
 - Automated backend and frontend deployment verification
+- Digest-pinned Paketo builder configuration shared by local builds and GitHub Actions
+- Independent security scanning of existing ACR images without rebuilding them
+- Syft JSON and SPDX JSON SBOM generation
+- Grype vulnerability reports generated from the Syft SBOM
+- Private security-report storage in Azure Blob Storage
+- GitHub Actions summaries limited to severity counts
+- Local scripts for scanning ACR images and downloading stored security reports
 
 ---
 
@@ -83,6 +93,16 @@ The application currently supports:
   - [x] Resource-scoped Azure RBAC for ACR, Container Apps, and Static Web Apps
   - [x] Environment-specific CI/CD configuration without hardcoded ACR names or Static Web Apps URLs
   - [x] Backend and frontend deployment verification
+- [x] Step 7: Software supply chain security / DevSecOps
+  - [x] Local inspection of Buildpacks-produced OCI images with Syft
+  - [x] Syft JSON and SPDX JSON SBOM generation
+  - [x] Grype vulnerability scanning and JSON reporting
+  - [x] Vulnerability remediation followed by re-scanning
+  - [x] Digest-resolved scanning of existing ACR images without rebuilding them
+  - [x] Independent `.github/workflows/security-scan.yml` workflow
+  - [x] Private Azure Blob Storage for detailed security reports
+  - [x] Container-scoped RBAC for report writers and readers
+  - [x] Local ACR scan and report-download scripts
 
 Step 4 implementation details are documented in:
 
@@ -103,22 +123,24 @@ docs/step06-cicd.md
 docs/step06-cicd.ja.md
 ```
 
+Step 7 implementation, operating commands, and the verified remediation case study are summarized in [Software Supply Chain Security](#software-supply-chain-security).
+
 ### Planned
 
-- [ ] Step 7: Spring Boot Diagnostics with AI-assisted local diagnostics using Spring Boot Actuator, BootUI, and BootUI MCP
-- [ ] Step 8: Observability with OpenTelemetry and Apache SkyWalking for tracing across HTTP, Spring Boot, and Azure SQL
-- [ ] Step 9: Identity lifecycle management
-- [ ] Step 10: Replace Static Web Apps with a Buildpacks-based frontend container as an alternative architecture
-- [ ] Step 11: AI / RAG with Azure OpenAI, RAG, and OpenTelemetry tracing for AI processing
+- [ ] Step 8: Spring Boot Diagnostics with AI-assisted local diagnostics using Spring Boot Actuator, BootUI, and BootUI MCP
+- [ ] Step 9: Observability with OpenTelemetry and Apache SkyWalking for tracing across HTTP, Spring Boot, and Azure SQL
+- [ ] Step 10: Identity lifecycle management
+- [ ] Step 11: Replace Static Web Apps with a Buildpacks-based frontend container as an alternative architecture
+- [ ] Step 12: AI / RAG with Azure OpenAI, RAG, and OpenTelemetry tracing for AI processing
 
 Future roadmap documents will use the following naming pattern:
 
 ```text
-docs/step07-spring-boot-diagnostics.md
-docs/step08-observability.md
-docs/step09-identity-lifecycle.md
-docs/step10-frontend-container.md
-docs/step11-ai-rag.md
+docs/step08-spring-boot-diagnostics.md
+docs/step09-observability.md
+docs/step10-identity-lifecycle.md
+docs/step11-frontend-container.md
+docs/step12-ai-rag.md
 ```
 
 ---
@@ -229,7 +251,7 @@ The default development environment is defined in:
 config/dev.psd1
 ```
 
-This file is the source of truth for environment-specific, non-secret resource names used by the deployment scripts, including the resource group, Azure Container Registry, Container Apps environment, managed identities, Container App, Static Web App, and Azure SQL resources.
+This file is the source of truth for environment-specific, non-secret resource names used by the deployment and security scripts, including the resource group, Azure Container Registry, Container Apps environment, managed identities, Container App, Static Web App, Azure SQL resources, security-report storage, and the digest-pinned backend builder image.
 
 The GitHub Actions managed identity is configured with:
 
@@ -257,6 +279,8 @@ The following tools are required:
 - Git
 - PowerShell
 - sqlcmd
+- Syft
+- Grype
 
 Verify the local container runtime:
 
@@ -351,7 +375,7 @@ Deploy the frontend to Azure Static Web Apps
 Verify sign-in, access-token API calls, and role-based authorization
 ```
 
-The primary application deployment scripts are:
+The primary application deployment and security-operations scripts are:
 
 ```text
 scripts/whatif-infra.ps1
@@ -365,6 +389,8 @@ scripts/build-frontend.ps1
 scripts/deploy-frontend.ps1
 scripts/verify-backend-deployment.ps1
 scripts/verify-frontend-deployment.ps1
+scripts/scan-backend-image.ps1
+scripts/download-security-report.ps1
 ```
 
 
@@ -466,7 +492,7 @@ Paketo Noble Java Tiny Builder
 linux/amd64
 ```
 
-A versioned builder image is used instead of relying on the mutable `latest` tag.
+The builder image is pinned by digest instead of relying on the mutable `latest` tag. The same `BackendBuilderImage` value in `config/dev.psd1` is used by local builds and GitHub Actions so that both paths build with the verified builder.
 
 The frontend build resolves the deployed Azure Container App endpoint and supplies it to Vite through:
 
@@ -493,6 +519,109 @@ Microsoft Entra ID, MSAL, backend JWT validation, and role-assignment details ar
 ```text
 docs/step05-entra-id-authentication-authorization.md
 ```
+
+---
+
+## Software Supply Chain Security
+
+Step 7 adds a security-assessment path for the backend OCI image produced by Step 6. The security workflow inspects the artifact already stored in Azure Container Registry; it does not rebuild the application.
+
+```text
+CI/CD
+  │
+  └── Build and push backend:<Git SHA>
+            │
+            ▼
+     Azure Container Registry
+            │
+            ├── Resolve tag to OCI digest
+            ├── Syft
+            │     ├── sbom.syft.json
+            │     └── sbom.spdx.json
+            ├── Grype
+            │     └── grype-report.json
+            └── scan-metadata.json
+                    │
+                    ▼
+          Private Azure Blob Storage
+```
+
+The responsibilities are intentionally separated:
+
+```text
+.github/workflows/cicd.yml
+  Build, deploy, and verify the application
+
+.github/workflows/security-scan.yml
+  Inventory and assess an existing ACR artifact
+```
+
+The manually triggered security workflow accepts a 40-character Git SHA, resolves `backend:<SHA>` to an OCI digest, and scans that immutable reference. Detailed reports are uploaded under:
+
+```text
+security-reports/backend/<Git SHA>/
+├── sbom.syft.json
+├── sbom.spdx.json
+├── grype-report.json
+└── scan-metadata.json
+```
+
+The Blob container is private. Anonymous access and Shared Key authorization are disabled, HTTPS is required, and TLS 1.2 or later is enforced. The GitHub Actions managed identity has `Storage Blob Data Contributor` at the `security-reports` container scope. Human reviewers need only `Storage Blob Data Reader` at the same scope. GitHub Actions displays severity counts, not package names, CVE details, installed versions, fixed versions, or the full SBOM.
+
+### Scan an ACR image locally
+
+Use the local inspection script to scan the latest `backend` tag in ACR:
+
+```powershell
+.\scripts\scan-backend-image.ps1
+```
+
+To scan a specific CI/CD artifact:
+
+```powershell
+.\scripts\scan-backend-image.ps1 `
+  -ImageTag "<40-character Git SHA>"
+```
+
+The script obtains a short-lived ACR access token with `az acr login --expose-token`, resolves the tag to a digest, and lets Syft read the private registry directly with the `registry:` source. It does not require `docker pull` or a running Docker daemon. Local outputs are written to `security-reports/<SHA>/`, which must remain outside version control.
+
+### Download a stored report
+
+Download the newest completed report from private Blob Storage:
+
+```powershell
+.\scripts\download-security-report.ps1
+```
+
+Download the report for a specific artifact:
+
+```powershell
+.\scripts\download-security-report.ps1 `
+  -ImageTag "<40-character Git SHA>"
+```
+
+The script uses the signed-in Azure identity through `--auth-mode login`; it does not use a Storage Account key.
+
+### Verified remediation loop
+
+The Step 7 case study exercised the complete `scan -> identify -> fix -> re-scan` loop:
+
+```text
+OpenJDK 21.0.12
+  └── CVE-2026-114938 detected
+          │
+          ▼
+Trace the runtime to the BellSoft Liberica buildpack and Paketo builder
+          │
+          ▼
+Update and digest-pin the builder
+          │
+          ▼
+BellSoft Liberica JRE 21.0.13.1+5
+  └── CVE-2026-114938 not detected on re-scan
+```
+
+This verifies both remediation and provenance: the deployed runtime comes from the builder and its participating buildpacks, not only from Maven dependencies declared in `pom.xml`.
 
 ---
 
@@ -757,14 +886,16 @@ docs/step06-cicd.md
 docs/step06-cicd.ja.md
 ```
 
+The Step 7 implementation and operating commands are currently summarized in this README under [Software Supply Chain Security](#software-supply-chain-security).
+
 Future roadmap documents will follow the same naming convention:
 
 ```text
-docs/step07-spring-boot-diagnostics.md
-docs/step08-observability.md
-docs/step09-identity-lifecycle.md
-docs/step10-frontend-container.md
-docs/step11-ai-rag.md
+docs/step08-spring-boot-diagnostics.md
+docs/step09-observability.md
+docs/step10-identity-lifecycle.md
+docs/step11-frontend-container.md
+docs/step12-ai-rag.md
 ```
 
 ### Reference Documentation
@@ -842,6 +973,8 @@ The backend uses a User Assigned Managed Identity for Azure SQL access and does 
 
 The database identity follows a least-privilege, object-level permission model.
 
+Detailed SBOMs and vulnerability reports are stored in a private Azure Blob container rather than published as GitHub artifacts. Access uses Microsoft Entra identities and container-scoped Azure RBAC. Storage Shared Key authorization is disabled, and local copies under `security-reports/` must not be committed.
+
 Do not commit:
 
 - Client Secrets
@@ -886,6 +1019,10 @@ Topics include:
 - Managed Identity database permissions
 - Container runtime connectivity
 - Buildpacks architecture mismatch
+- ACR authentication for Syft with `az acr login --expose-token`
+- Syft registry scanning and SBOM generation
+- Grype vulnerability-report generation
+- Private Blob report access with Azure RBAC
 - Azure Container Apps log retrieval
 - Vite build-time environment variables
 - Vite preview CORS
@@ -902,16 +1039,16 @@ Topics include:
 
 ## Next Steps
 
-### Step 7: Spring Boot Diagnostics
+### Step 8: Spring Boot Diagnostics
 
 The next step introduces local diagnostic capabilities using Spring Boot Actuator, BootUI, and BootUI MCP, including AI-assisted investigation with MCP clients.
 
 Later roadmap work includes:
 
-- Step 8: Observability with OpenTelemetry and Apache SkyWalking for tracing across HTTP, Spring Boot, and Azure SQL
-- Step 9: Identity lifecycle management, including user invitation and onboarding, self-service sign-up, and access reviews
-- Step 10: Buildpacks-based frontend containerization as an alternative architecture that replaces Azure Static Web Apps with Azure Container Apps
-- Step 11: AI / RAG with Azure OpenAI, RAG, and OpenTelemetry tracing for AI processing
+- Step 9: Observability with OpenTelemetry and Apache SkyWalking for tracing across HTTP, Spring Boot, and Azure SQL
+- Step 10: Identity lifecycle management, including user invitation and onboarding, self-service sign-up, and access reviews
+- Step 11: Buildpacks-based frontend containerization as an alternative architecture that replaces Azure Static Web Apps with Azure Container Apps
+- Step 12: AI / RAG with Azure OpenAI, RAG, and OpenTelemetry tracing for AI processing
 
 ---
 

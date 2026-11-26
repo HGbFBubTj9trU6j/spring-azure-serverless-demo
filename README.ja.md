@@ -9,6 +9,7 @@ Spring Boot Webアプリケーションを、Microsoft Azure上のサーバー�
 - Spring Boot
 - Azure Container Apps
 - Azure Container Registry
+- Azure Blob Storage
 - Azure SQL Database
 - Microsoft Entra ID認証
 - MSALを使用したReactの認証とアクセストークン取得
@@ -16,6 +17,8 @@ Spring Boot Webアプリケーションを、Microsoft Azure上のサーバー�
 - ユーザー割り当てマネージドID
 - BicepによるInfrastructure as Code
 - Cloud Native Buildpacks
+- ソフトウェアインベントリとSBOM生成のためのSyft
+- 脆弱性スキャンのためのGrype
 
 ReactフロントエンドはAzure Static Web Appsでホストされ、Azure Container Apps上で実行されるSpring Boot REST APIと通信します。
 
@@ -50,7 +53,17 @@ ReactフロントエンドはAzure Static Web Appsでホストされ、Azure Con
 - スクリプトによるビルド、デプロイ、検証
 - GitHub ActionsによるCI/CD
 - GitHub OIDCを使用したAzure認証
+- GitHub ActionsマネージドIDに対するリソーススコープのAzure RBAC
+- `config/dev.psd1`による環境固有の非シークレット設定
+- Azure Container RegistryとAzure Static Web Appsのデプロイ先の動的解決
 - バックエンドとフロントエンドの自動デプロイ検証
+- ローカルビルドとGitHub Actionsで共有する、digest固定のPaketo Builder設定
+- 既存のACRイメージを再ビルドせずに評価する独立したSecurity Scan
+- Syft JSONおよびSPDX JSON形式のSBOM生成
+- Syft SBOMを入力にしたGrype脆弱性レポート
+- Azure Blob StorageへのSecurity Reportの非公開保存
+- Severity件数だけに限定したGitHub Actions Summary
+- ACRイメージのローカルスキャンと保存済みレポート取得用スクリプト
 
 ---
 
@@ -76,7 +89,20 @@ ReactフロントエンドはAzure Static Web Appsでホストされ、Azure Con
   - [x] バックエンドOCIイメージのビルドとACRへのプッシュ
   - [x] Azure Container Appsへのデプロイ
   - [x] Azure Static Web Appsへのデプロイ
+  - [x] ユーザー割り当てマネージドIDを使用したGitHub OIDC認証
+  - [x] ACR、Container Apps、Static Web Appsに対するリソーススコープのAzure RBAC
+  - [x] ACR名やStatic Web Apps URLをハードコードしない環境固有のCI/CD設定
   - [x] バックエンドとフロントエンドのデプロイ検証
+- [x] Step 7: Software Supply Chain Security / DevSecOps
+  - [x] Buildpacksで作成したローカルOCIイメージのSyftによる調査
+  - [x] Syft JSONおよびSPDX JSON形式のSBOM生成
+  - [x] Grypeによる脆弱性スキャンとJSONレポート生成
+  - [x] 脆弱性の修正と再スキャン
+  - [x] 既存ACRイメージをdigestで固定し、再ビルドせずにスキャン
+  - [x] 独立した`.github/workflows/security-scan.yml`ワークフロー
+  - [x] 詳細Security Report用のPrivate Azure Blob Storage
+  - [x] レポート書き込み・読み取りに対するContainerスコープのRBAC
+  - [x] ACRローカルスキャンとレポートダウンロード用スクリプト
 
 Step 4の実装の詳細は、以下に記載されています。
 
@@ -94,25 +120,27 @@ Step 6の実装の詳細は、以下に記載されています。
 
 ```text
 docs/step06-cicd.md
-docs/step06-cicd-ja.md
+docs/step06-cicd.ja.md
 ```
+
+Step 7の実装、操作コマンド、検証済みの修正事例は、[Software Supply Chain Security](#software-supply-chain-security)でまとめています。
 
 ### 計画中
 
-- [ ] Step 7: Spring Boot Actuator、BootUI、BootUI MCPを使用した、AI支援によるローカル診断を含むSpring Boot診断
-- [ ] Step 8: HTTP、Spring Boot、Azure SQL間のトレースにOpenTelemetryとApache SkyWalkingを使用する可観測性
-- [ ] Step 9: IDライフサイクル管理
-- [ ] Step 10: 代替アーキテクチャとしてStatic Web AppsをBuildpacksベースのフロントエンドコンテナーに置き換え
-- [ ] Step 11: Azure OpenAI、RAG、およびAI処理のOpenTelemetryトレースを使用したAI / RAG
+- [ ] Step 8: Spring Boot Actuator、BootUI、BootUI MCPを使用した、AI支援によるローカル診断を含むSpring Boot診断
+- [ ] Step 9: HTTP、Spring Boot、Azure SQL間のトレースにOpenTelemetryとApache SkyWalkingを使用する可観測性
+- [ ] Step 10: IDライフサイクル管理
+- [ ] Step 11: 代替アーキテクチャとしてStatic Web AppsをBuildpacksベースのフロントエンドコンテナーに置き換え
+- [ ] Step 12: Azure OpenAI、RAG、およびAI処理のOpenTelemetryトレースを使用したAI / RAG
 
 今後のロードマップドキュメントには、以下の命名規則を使用します。
 
 ```text
-docs/step07-spring-boot-diagnostics.md
-docs/step08-observability.md
-docs/step09-identity-lifecycle.md
-docs/step10-frontend-container.md
-docs/step11-ai-rag.md
+docs/step08-spring-boot-diagnostics.md
+docs/step09-observability.md
+docs/step10-identity-lifecycle.md
+docs/step11-frontend-container.md
+docs/step12-ai-rag.md
 ```
 
 ---
@@ -223,6 +251,16 @@ config/
 config/dev.psd1
 ```
 
+このファイルは、デプロイおよびSecurity Scanスクリプトが使用する環境固有の非シークレット設定の正本です。リソースグループ、Azure Container Registry、Container Apps環境、マネージドID、Container App、Static Web App、Azure SQL、Security Report Storage、およびdigest固定のBackend Builder Imageを定義します。
+
+GitHub ActionsマネージドIDは、以下で構成します。
+
+```powershell
+GithubActionsIdentityName = "spring-azure-serverless-demo-dev-github-id"
+```
+
+GitHub Actionsワークフローも`config/dev.psd1`からデプロイ設定を読み取ります。Azure Container RegistryのLogin Serverは`AcrName`から解決し、Azure Static Web AppsのHostnameは`StaticWebAppName`と`ResourceGroup`を使用してAzureから取得します。そのため、環境固有のACR名やStatic Web Apps URLをワークフローへハードコードしません。
+
 シークレット値をこのファイルに保存しないでください。
 
 ---
@@ -241,6 +279,8 @@ config/dev.psd1
 - Git
 - PowerShell
 - sqlcmd
+- Syft
+- Grype
 
 ローカルのコンテナーランタイムを確認します。
 
@@ -320,6 +360,9 @@ Azure SQLをデプロイして検証
 バックエンドをAzure Container Appsにデプロイ
         │
         ▼
+GitHub ActionsからContainer Appへのアクセスを構成
+        │
+        ▼
 Microsoft Entra IDアプリ登録、APIスコープ、アプリロールを構成
         │
         ▼
@@ -332,7 +375,7 @@ Reactフロントエンドをビルド
 サインイン、アクセストークンを使用したAPI呼び出し、ロールベースの認可を検証
 ```
 
-主要なアプリケーションデプロイスクリプトは以下のとおりです。
+主要なアプリケーションデプロイおよびセキュリティ運用スクリプトは以下のとおりです。
 
 ```text
 scripts/whatif-infra.ps1
@@ -341,10 +384,13 @@ scripts/deploy-database.ps1
 scripts/verify-database.ps1
 scripts/build-backend.ps1
 scripts/deploy-backend.ps1
+scripts/setup-github-actions.ps1
 scripts/build-frontend.ps1
 scripts/deploy-frontend.ps1
 scripts/verify-backend-deployment.ps1
 scripts/verify-frontend-deployment.ps1
+scripts/scan-backend-image.ps1
+scripts/download-security-report.ps1
 ```
 
 バックエンドAPIのアプリ登録では、`access_as_user`委任スコープを公開し、`Fortune.Admin`アプリロールも定義する必要があります。Reactクライアントのアプリ登録には、`access_as_user`への委任アクセス許可を付与する必要があります。現在の構成と検証手順については、Step 5のドキュメントを参照してください。
@@ -354,6 +400,27 @@ scripts/verify-frontend-deployment.ps1
 ```text
 docs/deployment.md
 ```
+
+### GitHub ActionsからAzureへのアクセス
+
+`deploy-infra.ps1`は、GitHub Actions用のユーザー割り当てマネージドIDとFederated Identity Credentialをプロビジョニングします。また、共有リソースの作成時に構成できる権限をインフラストラクチャのデプロイで割り当てます。
+
+| 対象リソース | Azureロール | 目的 |
+|---|---|---|
+| Azure Container Registry | `AcrPush` | Backend OCI ImageをPushする |
+| Azure Static Web Apps | `Reader` | Frontendのデプロイ検証でStatic Web AppsのHostnameを解決する |
+
+Container Appは最初のBackendデプロイで作成されます。その後、以下を実行します。
+
+```powershell
+./scripts/setup-github-actions.ps1
+```
+
+このスクリプトは、個別のContainer Appスコープで、GitHub ActionsマネージドIDへ`Container Apps Contributor`を割り当てます。GitHub Actionsはこの権限を使用してBackend Imageを更新し、デプロイ検証時にActive Revisionを確認します。
+
+3つのロール割り当ては、リソースグループ全体ではなく、個別のACR、Container App、Static Web Appの各リソースへスコープを限定します。
+
+GitHub Actionsは、既存Azureリソースへのアプリケーション変更をデプロイします。インフラストラクチャ全体のプロビジョニングは担当しません。
 
 ---
 
@@ -422,7 +489,7 @@ Paketo Noble Java Tiny Builder
 linux/amd64
 ```
 
-変更可能な`latest`タグに依存する代わりに、バージョンが固定されたビルダーイメージを使用します。
+変更可能な`latest`タグには依存せず、Builder Imageをdigestで固定します。ローカルビルドとGitHub Actionsは、どちらも`config/dev.psd1`の`BackendBuilderImage`を使用するため、検証済みの同じBuilderでビルドできます。
 
 フロントエンドのビルドは、デプロイされたAzure Container Appのエンドポイントを解決し、以下を介してViteに渡します。
 
@@ -447,6 +514,109 @@ Microsoft Entra ID、MSAL、バックエンドのJWT検証、およびロール�
 ```text
 docs/step05-entra-id-authentication-authorization.md
 ```
+
+---
+
+## Software Supply Chain Security
+
+Step 7では、Step 6で生成したBackend OCI Imageを対象とするセキュリティ評価経路を追加しました。Security ScanはAzure Container Registryへ保存済みの成果物を調査し、アプリケーションを再ビルドしません。
+
+```text
+CI/CD
+  │
+  └── backend:<Git SHA>をビルドしてPush
+            │
+            ▼
+     Azure Container Registry
+            │
+            ├── TagをOCI Digestへ解決
+            ├── Syft
+            │     ├── sbom.syft.json
+            │     └── sbom.spdx.json
+            ├── Grype
+            │     └── grype-report.json
+            └── scan-metadata.json
+                    │
+                    ▼
+          Private Azure Blob Storage
+```
+
+責務は意図的に分離しています。
+
+```text
+.github/workflows/cicd.yml
+  アプリケーションをビルド、デプロイ、検証する
+
+.github/workflows/security-scan.yml
+  ACR上の既存成果物を棚卸しし、セキュリティ評価する
+```
+
+手動起動するSecurity Scanワークフローは、40文字のGit SHAを受け取り、`backend:<SHA>`をOCI Digestへ解決してから、不変の参照をスキャンします。詳細レポートは、以下へアップロードします。
+
+```text
+security-reports/backend/<Git SHA>/
+├── sbom.syft.json
+├── sbom.spdx.json
+├── grype-report.json
+└── scan-metadata.json
+```
+
+Blob Containerは非公開です。匿名アクセスとShared Key認証を無効にし、HTTPSを必須とし、TLS 1.2以上を適用します。GitHub ActionsマネージドIDには、`security-reports` Containerスコープで`Storage Blob Data Contributor`を付与します。人が確認する場合は、同じスコープの`Storage Blob Data Reader`だけを使用します。GitHub Actionsに表示するのはSeverity件数のみであり、Package名、CVEの詳細、インストール済みVersion、修正版Version、完全なSBOMは公開しません。
+
+### ACRイメージをローカルでスキャン
+
+ACRの最新`backend` Tagをスキャンするには、ローカル調査用スクリプトを実行します。
+
+```powershell
+.\scripts\scan-backend-image.ps1
+```
+
+特定のCI/CD成果物をスキャンする場合は、Git SHAを指定します。
+
+```powershell
+.\scripts\scan-backend-image.ps1 `
+  -ImageTag "<40-character Git SHA>"
+```
+
+このスクリプトは、`az acr login --expose-token`で短期ACR Access Tokenを取得し、TagをDigestへ解決してから、Syftの`registry:` SourceでPrivate Registryを直接読み取ります。`docker pull`も、実行中のDocker daemonも必要ありません。ローカルの出力先は`security-reports/<SHA>/`です。このディレクトリはGit管理外のままにしてください。
+
+### 保存済みレポートをダウンロード
+
+Private Blob Storage上の最新の完了済みレポートを取得します。
+
+```powershell
+.\scripts\download-security-report.ps1
+```
+
+特定成果物のレポートを取得する場合は、Git SHAを指定します。
+
+```powershell
+.\scripts\download-security-report.ps1 `
+  -ImageTag "<40-character Git SHA>"
+```
+
+このスクリプトは、`--auth-mode login`を介してサインイン済みAzure IDを使用し、Storage Account Keyは使用しません。
+
+### 検証済みの修正ループ
+
+Step 7のケーススタディでは、`scan -> identify -> fix -> re-scan`の一連の流れを実行しました。
+
+```text
+OpenJDK 21.0.12
+  └── CVE-2026-114938を検出
+          │
+          ▼
+RuntimeをBellSoft Liberica BuildpackとPaketo Builderまで追跡
+          │
+          ▼
+Builderを更新し、Digestで固定
+          │
+          ▼
+BellSoft Liberica JRE 21.0.13.1+5
+  └── 再スキャンでCVE-2026-114938が非検出
+```
+
+この検証では、脆弱性を修正できたことに加え、デプロイされるRuntimeの出所も確認しています。OCI ImageのRuntimeは、`pom.xml`に宣言したMaven依存関係だけでなく、Builderと参加Buildpackからも構成されます。
 
 ---
 
@@ -640,7 +810,7 @@ Step 6のCI/CDおよびデプロイ検証の詳細は、以下に記載されて
 
 ```text
 docs/step06-cicd.md
-docs/step06-cicd-ja.md
+docs/step06-cicd.ja.md
 ```
 
 ### ローカル機能検証
@@ -706,17 +876,19 @@ docs/step05-entra-id-authentication-authorization.md
 docs/step04-data-access.md
 docs/step05-entra-id-authentication-authorization.md
 docs/step06-cicd.md
-docs/step06-cicd-ja.md
+docs/step06-cicd.ja.md
 ```
+
+Step 7の実装と操作コマンドは、現在このREADMEの[Software Supply Chain Security](#software-supply-chain-security)でまとめています。
 
 今後のロードマップドキュメントも同じ命名規則に従います。
 
 ```text
-docs/step07-spring-boot-diagnostics.md
-docs/step08-observability.md
-docs/step09-identity-lifecycle.md
-docs/step10-frontend-container.md
-docs/step11-ai-rag.md
+docs/step08-spring-boot-diagnostics.md
+docs/step09-observability.md
+docs/step10-identity-lifecycle.md
+docs/step11-frontend-container.md
+docs/step12-ai-rag.md
 ```
 
 ### リファレンスドキュメント
@@ -755,7 +927,7 @@ GitHub ActionsによるCI/CDとデプロイ検証:
 
 ```text
 docs/step06-cicd.md
-docs/step06-cicd-ja.md
+docs/step06-cicd.ja.md
 ```
 
 既知の問題、診断、解決策:
@@ -793,6 +965,8 @@ Reactフロントエンドは、`Fortune.Admin`を持たないユーザーに対
 バックエンドはAzure SQLへのアクセスにユーザー割り当てマネージドIDを使用し、アプリケーションのソースにデータベースパスワードを保存しません。
 
 データベースIDは、最小権限に基づくオブジェクトレベルのアクセス許可モデルに従います。
+
+詳細なSBOMと脆弱性レポートはGitHub Artifactとして公開せず、Private Azure Blob Containerへ保存します。アクセスにはMicrosoft Entra IDとContainerスコープのAzure RBACを使用します。Storage Shared Key認証は無効です。`security-reports/`配下のローカルコピーをコミットしないでください。
 
 以下をコミットしないでください。
 
@@ -838,6 +1012,10 @@ docs/troubleshooting.md
 - マネージドIDのデータベース権限
 - コンテナーランタイムの接続
 - Buildpacksのアーキテクチャ不一致
+- `az acr login --expose-token`を使用したSyft向けACR認証
+- SyftによるRegistry ScanとSBOM生成
+- Grypeによる脆弱性レポート生成
+- Azure RBACを使用したPrivate Blob Reportへのアクセス
 - Azure Container Appsのログ取得
 - Viteのビルド時環境変数
 - ViteプレビューのCORS
@@ -854,16 +1032,16 @@ docs/troubleshooting.md
 
 ## 次のStep
 
-### Step 7: Spring Boot診断
+### Step 8: Spring Boot診断
 
 次のStepでは、Spring Boot Actuator、BootUI、BootUI MCPを使用したローカル診断機能を導入します。これには、MCPクライアントを使用したAI支援による調査が含まれます。
 
 その後のロードマップには、以下が含まれます。
 
-- Step 8: HTTP、Spring Boot、Azure SQL間のトレースにOpenTelemetryとApache SkyWalkingを使用する可観測性
-- Step 9: ユーザーの招待とオンボーディング、セルフサービスサインアップ、アクセスレビューを含むIDライフサイクル管理
-- Step 10: Azure Static Web AppsをAzure Container Appsに置き換える代替アーキテクチャとしての、Buildpacksベースのフロントエンドコンテナー化
-- Step 11: Azure OpenAI、RAG、およびAI処理のOpenTelemetryトレースを使用したAI / RAG
+- Step 9: HTTP、Spring Boot、Azure SQL間のトレースにOpenTelemetryとApache SkyWalkingを使用する可観測性
+- Step 10: ユーザーの招待とオンボーディング、セルフサービスサインアップ、アクセスレビューを含むIDライフサイクル管理
+- Step 11: Azure Static Web AppsをAzure Container Appsに置き換える代替アーキテクチャとしての、Buildpacksベースのフロントエンドコンテナー化
+- Step 12: Azure OpenAI、RAG、およびAI処理のOpenTelemetryトレースを使用したAI / RAG
 
 ---
 
