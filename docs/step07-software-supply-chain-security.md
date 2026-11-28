@@ -31,7 +31,7 @@ This step covers:
 - keeping detailed reports in private Azure Blob Storage;
 - publishing only severity counts to the GitHub Actions summary;
 - using local scripts to investigate an ACR image and retrieve stored reports; and
-- verifying remediation through a real Java runtime vulnerability case study.
+- verifying remediation through both Java runtime and Maven-managed dependency case studies.
 
 > [!IMPORTANT]
 > A scanner finding is evidence for investigation, not an automatic statement of exploitability. Review the detected package, match type, fixed versions, runtime architecture, application exposure, and compensating controls before making a release decision.
@@ -558,7 +558,106 @@ This verifies two separate properties:
 
 The non-detection is specific to the image, scanner, and vulnerability database used for the verification. It does not prove the image has no other vulnerabilities.
 
-## 7.10 Builder pinning and updates
+## 7.10 Verified remediation case study: Netty Maven dependencies
+
+The project also exercised the remediation loop for a Netty vulnerability introduced transitively through the Azure SDK.
+
+### Initial observation and dependency trace
+
+Grype detected affected Netty components in the Buildpacks-produced OCI image. The affected range included 4.2.19.Final, and 4.2.20.Final was identified as the corrected version. Because the finding covered both `netty-handler` and the QUIC classes, updating only one Netty module would not have been sufficient.
+
+The dependency path was confirmed with Maven:
+
+```powershell
+.\mvnw.cmd dependency:tree "-Dincludes=io.netty"
+```
+
+In PowerShell, quote the entire `-Dincludes=io.netty` argument. Without the quotes, Maven can receive `.netty` as a separate argument and report `Unknown lifecycle phase ".netty"`.
+
+The resolved path was:
+
+```text
+com.azure:azure-identity:1.18.7
+  └── com.azure:azure-core-http-netty:1.16.8
+      └── io.netty:*:4.2.19.Final
+```
+
+This confirmed that Netty was a transitive dependency of `azure-identity`, not a dependency declared directly by the application.
+
+### Locate the managed version
+
+Before changing `pom.xml`, the effective POM was generated and inspected:
+
+```powershell
+.\mvnw.cmd help:effective-pom > effective-pom.xml
+Select-String -Path .\effective-pom.xml -Pattern "netty.version"
+```
+
+The effective POM contained:
+
+```xml
+<netty.version>4.2.19.Final</netty.version>
+```
+
+`effective-pom.xml` is generated diagnostic output and must not be committed.
+
+### Remediation
+
+The existing managed property was overridden in `pom.xml`:
+
+```xml
+<properties>
+    <!-- Other managed versions omitted -->
+    <netty.version>4.2.20.Final</netty.version>
+</properties>
+```
+
+The project did not add a direct dependency on `netty-handler` and did not import an additional Netty BOM. Using the existing property preserved the dependency-management boundary and kept related modules aligned.
+
+### Verification
+
+The dependency tree was checked again. The affected and related modules resolved consistently to 4.2.20.Final, including:
+
+```text
+io.netty:netty-handler:4.2.20.Final
+io.netty:netty-codec-classes-quic:4.2.20.Final
+io.netty:netty-codec-http3:4.2.20.Final
+io.netty:netty-common:4.2.20.Final
+```
+
+`netty-tcnative-boringssl-static` uses a separate version line and moved from 2.0.84.Final to 2.0.85.Final through the managed dependency set.
+
+The backend OCI image was then rebuilt with Buildpacks and scanned again with Grype. The target Netty finding was no longer present. Maven verifies the dependency graph; the final Grype scan verifies the content of the distributable OCI artifact.
+
+```text
+Grype finding in OCI image
+    ↓
+trace azure-identity → azure-core-http-netty → Netty
+    ↓
+confirm netty.version in the effective POM
+    ↓
+update 4.2.19.Final → 4.2.20.Final
+    ↓
+verify aligned modules with dependency:tree
+    ↓
+rebuild the Buildpacks OCI image
+    ↓
+re-scan with Grype
+    ↓
+target Netty finding not detected
+```
+
+### Findings requiring a different response
+
+The same scan showed three different remediation states:
+
+- **Remediate and verify:** Netty had a compatible corrected version, so the project updated it and re-scanned the image.
+- **Track and re-evaluate:** `tomcat-embed-core` 11.0.29 listed 11.0.30 as the corrected version, but 11.0.30 was not yet available from Maven Central at the time of investigation. The project did not declare an unavailable version merely to silence the finding.
+- **Validate provenance and match quality:** OpenSSL appeared through both binary and Ubuntu-package detection. Review the Ubuntu package version and advisory status rather than assuming that the upstream version string alone proves a backported fix is absent.
+
+This case demonstrates why updating only the package named in a scanner row can be unsafe. Related modules may remain affected, or the application may end up with an unsupported mixed-version set.
+
+## 7.11 Builder pinning and updates
 
 Pinning the builder by digest makes builds reproducible, but a digest pin does not update itself. Treat the builder as a maintained dependency:
 
@@ -575,7 +674,7 @@ Pinning the builder by digest makes builds reproducible, but a digest pin does n
 
 Do not replace a digest pin with a floating `latest` tag merely to receive security updates automatically. Controlled update plus re-verification preserves both security and reproducibility.
 
-## 7.11 ACR artifact lifecycle
+## 7.12 ACR artifact lifecycle
 
 Git-SHA tags accumulate as development continues. ACR is a billed service, but tag count alone does not equal consumed storage because OCI layers can be shared.
 
@@ -600,7 +699,7 @@ delete candidate: local *-dirty tags after verification
 
 Always list candidates first and delete by an explicit, reviewed condition. A time-based rule must not remove a currently deployed, released, or investigation-relevant image.
 
-## 7.12 Failure handling and troubleshooting
+## 7.13 Failure handling and troubleshooting
 
 ### `manifest unknown` or image not found
 
@@ -639,7 +738,7 @@ Always list candidates first and delete by an explicit, reviewed condition. A ti
 
 Treat a report as complete only when all four expected files exist. The download script uses `scan-metadata.json` when discovering the newest completed report so that a partially uploaded prefix is not selected as a successful result.
 
-## 7.13 Verification checklist
+## 7.14 Verification checklist
 
 Use this checklist before considering Step 7 complete for an artifact:
 

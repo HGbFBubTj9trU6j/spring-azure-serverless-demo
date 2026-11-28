@@ -31,7 +31,7 @@ Grypeによる脆弱性評価
 - 詳細レポートをPrivate Azure Blob Storageへ保存する
 - GitHub Actions SummaryにはSeverity件数だけを表示する
 - ローカルスクリプトでACR Imageを調査し、保存済みレポートを取得する
-- 実際のJava Runtime脆弱性を題材に、修正を再スキャンで検証する
+- Java RuntimeとMaven管理依存関係の実例を題材に、修正を再スキャンで検証する
 
 > [!IMPORTANT]
 > Scannerの検出結果は調査の根拠であり、それだけで悪用可能性が確定するわけではありません。Release判断の前に、検出Package、Match Type、修正版Version、Runtime Architecture、Application Exposure、代替統制を確認してください。
@@ -558,7 +558,106 @@ CVE-2026-114938は非検出
 
 非検出という結果は、検証に使用したImage、Scanner、Vulnerability Databaseに対するものです。他の脆弱性が存在しないことを証明するものではありません。
 
-## 7.10 Builderの固定と更新
+## 7.10 検証済み修正事例: NettyのMaven依存関係
+
+このProjectでは、Applicationが直接宣言していないAzure SDK経由のNetty脆弱性についても、検出、依存経路の特定、修正、再検証のLoopを実行しました。
+
+### 最初の観測と依存経路の特定
+
+GrypeによるBuildpacks生成OCI Imageの検査で、影響を受けるNetty Componentが検出されました。対象範囲には4.2.19.Finalが含まれ、4.2.20.Finalが修正版として示されていました。検出対象には`netty-handler`だけでなくQUIC Classesも含まれていたため、1つのNetty Moduleだけを更新する方法では不十分です。
+
+Mavenで依存経路を確認しました。
+
+```powershell
+.\mvnw.cmd dependency:tree "-Dincludes=io.netty"
+```
+
+PowerShellでは、`-Dincludes=io.netty`全体を引用符で囲みます。引用符がない場合、Mavenへ`.netty`が別の引数として渡され、`Unknown lifecycle phase ".netty"`となることがあります。
+
+確認した依存経路は次のとおりです。
+
+```text
+com.azure:azure-identity:1.18.7
+  └── com.azure:azure-core-http-netty:1.16.8
+      └── io.netty:*:4.2.19.Final
+```
+
+これにより、NettyはApplicationの直接依存ではなく、`azure-identity`の推移的依存関係であることを確認しました。
+
+### 管理Versionの特定
+
+`pom.xml`を変更する前に、Effective POMを生成して管理Versionを確認しました。
+
+```powershell
+.\mvnw.cmd help:effective-pom > effective-pom.xml
+Select-String -Path .\effective-pom.xml -Pattern "netty.version"
+```
+
+Effective POMには次の値が含まれていました。
+
+```xml
+<netty.version>4.2.19.Final</netty.version>
+```
+
+`effective-pom.xml`は調査のために生成したFileであり、Commit対象にはしません。
+
+### 修正
+
+`pom.xml`の既存Propertyを上書きしました。
+
+```xml
+<properties>
+    <!-- その他の管理Versionは省略 -->
+    <netty.version>4.2.20.Final</netty.version>
+</properties>
+```
+
+`netty-handler`への直接依存や、追加のNetty BOMは導入していません。既存Propertyを使用することで、現在の依存関係管理境界を維持し、関連ModuleのVersionをそろえました。
+
+### 検証
+
+依存関係Treeを再確認し、対象および関連Moduleが一貫して4.2.20.Finalへ解決されたことを確認しました。
+
+```text
+io.netty:netty-handler:4.2.20.Final
+io.netty:netty-codec-classes-quic:4.2.20.Final
+io.netty:netty-codec-http3:4.2.20.Final
+io.netty:netty-common:4.2.20.Final
+```
+
+`netty-tcnative-boringssl-static`は別のVersion体系を使用しており、管理された依存関係Setにより2.0.84.Finalから2.0.85.Finalへ更新されました。
+
+その後、BuildpacksでBackend OCI Imageを再ビルドし、Grypeで再検査しました。再ビルドしたImageでは、今回対象としていたNettyの検出結果が表示されなくなりました。Mavenは依存関係Graphを確認し、最後のGrype Scanは配布対象OCI成果物の内容を確認します。
+
+```text
+OCI ImageでGrypeが検出
+    ↓
+azure-identity → azure-core-http-netty → Nettyを特定
+    ↓
+Effective POMでnetty.versionを確認
+    ↓
+4.2.19.Final → 4.2.20.Finalへ更新
+    ↓
+dependency:treeでModuleの整合性を確認
+    ↓
+BuildpacksでOCI Imageを再ビルド
+    ↓
+Grypeで再スキャン
+    ↓
+対象Netty脆弱性は非検出
+```
+
+### 異なる対応が必要な検出結果
+
+同じScanから、次の3種類の対応を確認できました。
+
+- **修正して再検証する:** Nettyは互換性のある修正版を取得できたため、更新してImageを再スキャンしました。
+- **記録して再評価する:** `tomcat-embed-core` 11.0.29には修正版11.0.30が示されましたが、調査時点ではMaven Centralからまだ取得できませんでした。検出結果を消す目的で存在しないVersionは宣言しません。
+- **ProvenanceとMatch品質を確認する:** OpenSSLはBinary検出とUbuntu Package検出の両方に現れました。Upstream Version文字列だけでBackport修正が存在しないと判断せず、Ubuntu Package VersionとAdvisoryを確認します。
+
+この事例は、Scannerの1行に表示されたPackageだけを更新する危険性も示します。関連Moduleが影響Versionに残るか、SupportされないVersion混在状態を作る可能性があります。
+
+## 7.11 Builderの固定と更新
 
 BuilderをDigestで固定するとBuildの再現性が高まりますが、固定したDigestは自動更新されません。Builderを保守対象の依存関係として扱います。
 
@@ -575,7 +674,7 @@ BuilderをDigestで固定するとBuildの再現性が高まりますが、固�
 
 Security Updateを自動取得するためだけに、Digest固定を変更可能な`latest` Tagへ戻さないでください。管理された更新と再検証によって、Securityと再現性の両方を維持します。
 
-## 7.11 ACR成果物のLifecycle
+## 7.12 ACR成果物のLifecycle
 
 開発を続けると、Git SHA Tagが蓄積します。ACRは課金対象ですが、OCI Layerは共有される場合があるため、Tag数はそのままStorage使用量にはなりません。
 
@@ -600,7 +699,7 @@ Demo環境では、次のようなPolicyから開始できます。
 
 必ず最初に候補を一覧し、明示的に確認した条件で削除します。期間ベースのRuleでも、現在Deploy中、Release済み、調査中のImageを削除してはいけません。
 
-## 7.12 失敗時の対応とTroubleshooting
+## 7.13 失敗時の対応とTroubleshooting
 
 ### `manifest unknown`またはImage Not Found
 
@@ -639,7 +738,7 @@ Demo環境では、次のようなPolicyから開始できます。
 
 4つのFileがすべて存在する場合だけ、Reportを完了と扱います。Download Scriptは最新の完了済みReportを探索するときに`scan-metadata.json`を使用し、一部だけUploadされたPrefixを正常結果として選択しないようにします。
 
-## 7.13 検証Checklist
+## 7.14 検証Checklist
 
 成果物についてStep 7を完了と判断する前に、次を確認します。
 
